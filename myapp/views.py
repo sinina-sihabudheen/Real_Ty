@@ -4,7 +4,7 @@ from rest_framework.decorators import action
 from django.contrib.auth import get_user_model
 from rest_framework_simplejwt.tokens import RefreshToken
 from django.core.mail import send_mail
-from .models import Seller, LandProperty, ResidentialProperty, EmailDevice, Region, Buyer
+from .models import User,Seller, LandProperty, ResidentialProperty, EmailDevice, Region, Buyer
 from .serializers import SellerSerializer, RegionSerializer, LandPropertySerializer, ResidentialPropertySerializer, RegisterSerializer, OTPSerializer, OTPVerificationSerializer, ResendOTPSerializer
 from rest_framework.views import APIView
 from django.core.exceptions import ObjectDoesNotExist
@@ -15,13 +15,12 @@ from rest_framework.permissions import AllowAny
 from django.conf import settings
 
 
-User = get_user_model()
-
-
 from allauth.socialaccount.providers.facebook.views import FacebookOAuth2Adapter
 from allauth.socialaccount.providers.google.views import GoogleOAuth2Adapter
 from dj_rest_auth.registration.views import SocialLoginView
 
+
+User = get_user_model()
 
 class FacebookLogin(SocialLoginView):
     adapter_class = FacebookOAuth2Adapter
@@ -35,18 +34,22 @@ class CustomLoginView(APIView):
     def post(self, request, *args, **kwargs):
         email = request.data.get('email')
         password = request.data.get('password')
-        
+        print(email,password)
 
         if email is None or password is None:
             return Response({'error': 'Please provide both email and password'}, status=status.HTTP_400_BAD_REQUEST)
 
+        print(f"Attempting to authenticate with email: {email}")
         user = authenticate(request, email=email, password=password)
+        print(f"Authentication result: {user}")
+
         if user is None:
+            print(f"Failed login attempt with email: {email}")
             return Response({'error': 'Invalid credentials'}, status=status.HTTP_401_UNAUTHORIZED)
 
         refresh = RefreshToken.for_user(user)
 
-        role = 'Buyer'  # Default to Buyer
+        role = 'Buyer' 
         if hasattr(user, 'seller'):
             role = 'Seller'
 
