@@ -12,6 +12,7 @@ https://docs.djangoproject.com/en/5.0/ref/settings/
 
 from pathlib import Path
 from datetime import timedelta
+from decouple import config
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
@@ -20,11 +21,10 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 # Quick-start development settings - unsuitable for production
 # See https://docs.djangoproject.com/en/5.0/howto/deployment/checklist/
 
-# SECURITY WARNING: keep the secret key used in production secret!
-SECRET_KEY = 'django-insecure-&on*mgr6oi86_be-u431lov@54q1q66%@ioyz-twjkq8y0v#ll'
 
-# SECURITY WARNING: don't run with debug turned on in production!
-DEBUG = True
+
+SECRET_KEY = config('SECRET_KEY')
+DEBUG = config('DEBUG', default=False, cast=bool)
 
 ALLOWED_HOSTS = []
 
@@ -56,7 +56,7 @@ INSTALLED_APPS = [
     'allauth.socialaccount',
     'allauth.socialaccount.providers.facebook',
     'allauth.socialaccount.providers.google',
-    
+
 #For OTP  
     'myapp',
     'django_otp',
@@ -107,6 +107,7 @@ ACCOUNT_AUTHENTICATION_METHOD = 'email'
 LOGIN_REDIRECT_URL = '/'
 LOGOUT_REDIRECT_URL = '/' 
 
+
 SOCIALACCOUNT_PROVIDERS = {
     'google': {
          'SCOPE': [
@@ -117,15 +118,15 @@ SOCIALACCOUNT_PROVIDERS = {
             'access_type': 'online',
         },
         'APP': {
-            'client_id': '30022518210-qqkvm7mipcjg5v4onr4nmeksluep5qvb.apps.googleusercontent.com',
-            'secret': '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',
+            'client_id': config('GOOGLE_CLIENT_ID'),
+            'secret': config('GOOGLE_SECRET'),
     
         }
     },
     'facebook': {
         'APP': {
-            'client_id': '1467417414166180',
-            'secret': 'd3e2a558e290fd94c473db4249fa029c',
+            'client_id': config('FB_CLIENT_ID'),
+            'secret': config('FB_SECRET'),
         
         }
     }
@@ -147,11 +148,11 @@ EMAIL_BACKEND = 'django.core.mail.backends.smtp.EmailBackend'
 EMAIL_HOST = 'smtp.google.com'
 EMAIL_PORT = 587
 EMAIL_USE_TLS = True
-EMAIL_HOST_USER = 'sinna.sihabudheen@gmail.com'
-EMAIL_HOST_PASSWORD = 'Sinina@1992'
+EMAIL_HOST_USER = config('EMAIL_HOST_USER')
+EMAIL_HOST_PASSWORD = config('EMAIL_HOST_PASSWORD')
 
 # OTP email settings
-OTP_EMAIL_SENDER = 'realty sinna.sihabudheen@gmail.com'
+OTP_EMAIL_SENDER = config('OTP_EMAIL_SENDER')
 
 
 SIMPLE_JWT = {
