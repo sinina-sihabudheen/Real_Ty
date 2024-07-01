@@ -12,6 +12,7 @@ from django.contrib.auth import authenticate
 from .serializers import UserSerializer
 from django.db import transaction
 from rest_framework.permissions import AllowAny
+from django.conf import settings
 
 
 User = get_user_model()
@@ -34,6 +35,7 @@ class CustomLoginView(APIView):
     def post(self, request, *args, **kwargs):
         email = request.data.get('email')
         password = request.data.get('password')
+        
 
         if email is None or password is None:
             return Response({'error': 'Please provide both email and password'}, status=status.HTTP_400_BAD_REQUEST)
@@ -61,9 +63,6 @@ class RegionViewSet(viewsets.ReadOnlyModelViewSet):
 
 
 ####
-
-   
-
     
 
 class UserRegistrationView(generics.CreateAPIView):
@@ -87,24 +86,25 @@ class UserRegistrationView(generics.CreateAPIView):
        
         username = email 
         user = User.objects.create_user(username=username, email=email, password=password)
-
+        
      
         device = EmailDevice.objects.create(user=user, email=email)
-        device.generate_challenge()
 
+        device.generate_challenge()
+        print(device.token)
         send_mail(
             'Your OTP Code',
             f'Your OTP code is {device.token}',
-            'sinna.sihabudheen@gmail.com',
+            settings.EMAIL_HOST_USER,
             [email],
             fail_silently=False,
+            
         )
-
+        print("OTP sent to email.")
       
         return Response({
             'detail': 'OTP sent successfully',
             'email': email,
-            'token': device.token  
         }, status=status.HTTP_200_OK)
 
 class OTPVerificationView(generics.GenericAPIView):
