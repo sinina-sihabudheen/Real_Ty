@@ -29,7 +29,7 @@ class GoogleLogin(SocialLoginView):
 
 
 class CustomLoginView(APIView):
-    # permission_classes = []
+    permission_classes = []
     print("AAAAAAAAAAAAAAAAAAAAAAA")
 
     def post(self, request, *args, **kwargs):
@@ -42,10 +42,9 @@ class CustomLoginView(APIView):
             return Response({'error': 'Please provide both email and password'}, status=status.HTTP_400_BAD_REQUEST)
 
         print(f"Attempting to authenticate with email: {email}")
-        try:
-            user = authenticate(request, email=email, password=password)
-        except Exception as E:
-            print(E)
+        
+        user = authenticate(request, email=email, password=password)
+
         print(f"Authentication result: {user}")
 
         if user is None:
@@ -91,6 +90,16 @@ class UserRegistrationView(generics.CreateAPIView):
         username = email 
         user = User.objects.create_user(username=username, email=email, password=password)
         
+        if is_seller:
+            seller_profile = Seller.objects.create(
+                user=user, 
+                agency_name=serializer.validated_data['agency_name']
+            )
+            seller_profile.regions.set(serializer.validated_data['regions'])
+        else:
+            Buyer.objects.create(user=user)
+
+
         device = EmailDevice.objects.create(user=user, email=email)
         device.generate_challenge()
         print(device.token)
@@ -130,14 +139,18 @@ class OTPVerificationView(generics.GenericAPIView):
         try:
             user = User.objects.get(email=email)
             user.is_active = True
+        
             user.save()
         except User.DoesNotExist:
             return Response({'detail': 'User not found'}, status=status.HTTP_404_NOT_FOUND)
 
         # Deactivate the device token after successful verification
         device.deactivate()
+        
 
-        return Response({'detail': 'OTP verified successfully'}, status=status.HTTP_200_OK)
+        return Response({
+            'detail': 'OTP verified successfully',
+            }, status=status.HTTP_200_OK)
     
 
 class ResendOTPView(generics.GenericAPIView):

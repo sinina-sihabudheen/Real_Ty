@@ -50,9 +50,33 @@ class RegisterSerializer(serializers.ModelSerializer):
             raise serializers.ValidationError("Agency name and regions are required for seller registration.")
         return data
 
+    # def create(self, validated_data):
+    #     validated_data.pop('confirm_password', None)
+    #     token = validated_data.pop('token', None)
+    #     return {
+    #         'validated_data': validated_data,
+    #         'token': token
+    #     }
     def create(self, validated_data):
         validated_data.pop('confirm_password', None)
         token = validated_data.pop('token', None)
+        
+        user = User.objects.create_user(
+            username=validated_data['email'], 
+            email=validated_data['email'], 
+            password=validated_data['password'],
+            **{key: value for key, value in validated_data.items() if key not in ['is_seller', 'agency_name', 'regions']}
+        )
+
+        if validated_data.get('is_seller'):
+            seller_profile = Seller.objects.create(
+                user=user, 
+                agency_name=validated_data['agency_name']
+            )
+            seller_profile.regions.set(validated_data['regions'])
+        else:
+            Buyer.objects.create(user=user)
+
         return {
             'validated_data': validated_data,
             'token': token
