@@ -102,8 +102,6 @@ class OTPSerializer(serializers.Serializer):
     token = serializers.CharField(max_length=6)
 
 
-
-####
 class OTPVerificationSerializer(serializers.Serializer):
     email = serializers.EmailField()
     token = serializers.CharField(max_length=6)
@@ -118,6 +116,7 @@ class OTPVerificationSerializer(serializers.Serializer):
         except (User.DoesNotExist, EmailDevice.DoesNotExist):
             raise serializers.ValidationError('Invalid OTP or email')
         return data
+
 
 class ResendOTPSerializer(serializers.Serializer):
     email = serializers.EmailField()

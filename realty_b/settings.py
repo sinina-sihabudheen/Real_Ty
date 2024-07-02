@@ -142,15 +142,17 @@ AUTHENTICATION_BACKENDS = [
 ]
 
 #Email configuration
-EMAIL_BACKEND = 'django.core.mail.backends.smtp.EmailBackend' 
+
+# EMAIL_BACKEND = 'django.core.mail.backends.smtp.EmailBackend'
 EMAIL_HOST = 'smtp.gmail.com'
-EMAIL_PORT = 587
-EMAIL_USE_TLS = True
+EMAIL_PORT = 587  
+EMAIL_USE_TLS = True  
 EMAIL_HOST_USER = config('EMAIL_HOST_USER')
 EMAIL_HOST_PASSWORD = config('EMAIL_HOST_PASSWORD')
+EMAIL_BACKEND = 'realty_b.custom_email_backend.CustomEmailBackend'
 
-# OTP email settings
-OTP_EMAIL_SENDER = config('OTP_EMAIL_SENDER')
+# # OTP email settings
+# OTP_EMAIL_SENDER = 'realty sinna.sihabudheen@gmail.com'
 
 
 SIMPLE_JWT = {

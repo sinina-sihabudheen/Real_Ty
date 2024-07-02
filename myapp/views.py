@@ -29,9 +29,11 @@ class GoogleLogin(SocialLoginView):
 
 
 class CustomLoginView(APIView):
-    permission_classes = []
+    # permission_classes = []
+    print("AAAAAAAAAAAAAAAAAAAAAAA")
 
     def post(self, request, *args, **kwargs):
+        print("WWWWWWWWWWWWWWWWWWW")
         email = request.data.get('email')
         password = request.data.get('password')
         print(email,password)
@@ -40,7 +42,10 @@ class CustomLoginView(APIView):
             return Response({'error': 'Please provide both email and password'}, status=status.HTTP_400_BAD_REQUEST)
 
         print(f"Attempting to authenticate with email: {email}")
-        user = authenticate(request, email=email, password=password)
+        try:
+            user = authenticate(request, email=email, password=password)
+        except Exception as E:
+            print(E)
         print(f"Authentication result: {user}")
 
         if user is None:
@@ -65,9 +70,6 @@ class RegionViewSet(viewsets.ReadOnlyModelViewSet):
 
 
 
-####
-    
-
 class UserRegistrationView(generics.CreateAPIView):
     serializer_class = RegisterSerializer
     permission_classes = [AllowAny]
@@ -86,30 +88,28 @@ class UserRegistrationView(generics.CreateAPIView):
         except User.DoesNotExist:
             pass
 
-       
         username = email 
         user = User.objects.create_user(username=username, email=email, password=password)
         
-     
         device = EmailDevice.objects.create(user=user, email=email)
-
         device.generate_challenge()
         print(device.token)
+
         send_mail(
             'Your OTP Code',
             f'Your OTP code is {device.token}',
             settings.EMAIL_HOST_USER,
             [email],
             fail_silently=False,
-            
         )
+
         print("OTP sent to email.")
       
         return Response({
             'detail': 'OTP sent successfully',
             'email': email,
         }, status=status.HTTP_200_OK)
-
+    
 class OTPVerificationView(generics.GenericAPIView):
     serializer_class = OTPVerificationSerializer
     permission_classes = [AllowAny]
@@ -138,6 +138,7 @@ class OTPVerificationView(generics.GenericAPIView):
         device.deactivate()
 
         return Response({'detail': 'OTP verified successfully'}, status=status.HTTP_200_OK)
+    
 
 class ResendOTPView(generics.GenericAPIView):
     serializer_class = ResendOTPSerializer
