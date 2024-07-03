@@ -1,5 +1,6 @@
 from rest_framework import serializers
 from django.contrib.auth import get_user_model
+from django.core.validators import RegexValidator
 from .models import Seller, LandProperty, ResidentialProperty, EmailDevice, Region, Buyer
 
 User = get_user_model()
@@ -34,9 +35,43 @@ class RegisterSerializer(serializers.ModelSerializer):
     class Meta:
         model = User
         fields = ['username', 'email', 'password', 'confirm_password', 'address', 'contact_number', 'is_seller', 'agency_name', 'regions', 'token']
+       
         extra_kwargs = {
-            'password': {'write_only': True}
+            'password': {'write_only': True},
+            'email': {
+                'validators': [
+                    RegexValidator(
+                        regex=r'^[a-zA-Z0-9@.]*$', 
+                        message='Email should only contain letters and "@" or "."'
+                    )
+                ]
+            },
+            'username': {
+                'validators': [
+                    RegexValidator(
+                        regex=r'^[a-zA-Z]*$', 
+                        message='Username should only contain letters'
+                    )
+                ]
+            }
         }
+    def validate_password(self, value):
+            if len(value) < 8:
+                raise serializers.ValidationError("Password must be at least 8 characters long.")
+            if not any(char.isdigit() for char in value):
+                raise serializers.ValidationError("Password must contain at least one digit.")
+            if not any(char.isalpha() for char in value):
+                raise serializers.ValidationError("Password must contain at least one letter.")
+            return value
+
+    def validate_contact_number(self, value):
+            if not value.isdigit():
+                raise serializers.ValidationError("Contact number should only contain digits.")
+            if len(value) != 10:
+                raise serializers.ValidationError("Contact number should be 10 digits long.")
+            if value[0] not in '6789':
+                raise serializers.ValidationError("Contact number should start with 6, 7, 8, or 9.")
+            return value    
 
     def validate_email(self, value):
         if User.objects.filter(email=value).exists():
@@ -50,13 +85,7 @@ class RegisterSerializer(serializers.ModelSerializer):
             raise serializers.ValidationError("Agency name and regions are required for seller registration.")
         return data
 
-    # def create(self, validated_data):
-    #     validated_data.pop('confirm_password', None)
-    #     token = validated_data.pop('token', None)
-    #     return {
-    #         'validated_data': validated_data,
-    #         'token': token
-    #     }
+  
     def create(self, validated_data):
         validated_data.pop('confirm_password', None)
         token = validated_data.pop('token', None)

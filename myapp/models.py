@@ -58,7 +58,7 @@ class EmailDevice(models.Model):
         self.save()
 
     def is_valid(self):
-        return self.is_active and (timezone.now() < self.created_at + timedelta(minutes=1))
+        return self.is_active and (timezone.now() < self.created_at + timedelta(minutes=2))
 
     def verify_token(self, token):
         return self.token == token

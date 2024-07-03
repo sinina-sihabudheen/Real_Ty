@@ -11,7 +11,7 @@ from django.core.exceptions import ObjectDoesNotExist
 from django.contrib.auth import authenticate
 from .serializers import UserSerializer
 from django.db import transaction
-from rest_framework.permissions import AllowAny
+from rest_framework.permissions import AllowAny,IsAuthenticated
 from django.conf import settings
 
 
@@ -67,18 +67,6 @@ class RegionViewSet(viewsets.ReadOnlyModelViewSet):
     permission_classes = [AllowAny]
     queryset = Region.objects.all()
     serializer_class = RegionSerializer  
-
-
-# class RegionView(generics.GenericAPIView):
-#     queryset = Region.objects.all()
-#     serializer_class = RegionSerializer
-
-#     def get(self, request, *args, **kwargs):
-#         queryset = self.get_queryset()
-#         serializer = self.get_serializer(queryset, many=True)
-#         return Response(serializer.data)
-
-
 
 
 class UserRegistrationView(generics.CreateAPIView):
@@ -145,7 +133,7 @@ class OTPVerificationView(generics.GenericAPIView):
         try:
             device = EmailDevice.objects.get(email=email, token=token, is_active=True)
         except EmailDevice.DoesNotExist:
-            return Response({'detail': 'Invalid OTP or email'}, status=status.HTTP_400_BAD_REQUEST)
+            return Response({"message": 'Invalid OTP or email',"success":False}, status=status.HTTP_400_BAD_REQUEST)
 
         # Activate user account
         try:
@@ -154,14 +142,14 @@ class OTPVerificationView(generics.GenericAPIView):
         
             user.save()
         except User.DoesNotExist:
-            return Response({'detail': 'User not found'}, status=status.HTTP_404_NOT_FOUND)
+            return Response({"message": 'User not found', "success":False}, status=status.HTTP_404_NOT_FOUND)
 
         # Deactivate the device token after successful verification
         device.deactivate()
         
-
         return Response({
-            'detail': 'OTP verified successfully',
+            'message': 'OTP verified successfully',
+            'success':True,
             }, status=status.HTTP_200_OK)
     
 
@@ -181,24 +169,31 @@ class ResendOTPView(generics.GenericAPIView):
             return Response({'detail': 'User not found'}, status=status.HTTP_404_NOT_FOUND)
 
         EmailDevice.objects.filter(user=user, is_active=True).update(is_active=False)
-        self.send_otp(user)
+        self.send_otp(user,email)
 
         return Response({"detail": "OTP resent successfully"}, status=status.HTTP_200_OK)
 
-    def send_otp(self, user):
+    def send_otp(self, user,email):
         device = EmailDevice.objects.create(user=user, email=user.email)
         device.generate_challenge()
         send_mail(
             'Your OTP Code',
             f'Your OTP code is {device.token}',
-            'sinna.sihabudheen@gmail.com',
-            [user.email],
+            settings.EMAIL_HOST_USER,
+            [email],
             fail_silently=False,
-        )       
+        )
 
 class SellerViewSet(viewsets.ModelViewSet):
     queryset = Seller.objects.all()
     serializer_class = SellerSerializer
+
+class UserDetailView(generics.RetrieveAPIView):
+    serializer_class = UserSerializer
+    permission_classes = [IsAuthenticated]
+
+    def get_object(self):
+        return self.request.user
 
 class LandPropertyViewSet(viewsets.ModelViewSet):
     queryset = LandProperty.objects.all()
