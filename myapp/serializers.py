@@ -34,7 +34,7 @@ class RegisterSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = User
-        fields = ['username', 'email', 'password', 'confirm_password', 'address', 'contact_number', 'is_seller', 'agency_name', 'regions', 'token']
+        fields = ['username', 'email', 'password', 'confirm_password', 'address', 'contact_number', 'is_seller', 'is_buyer', 'agency_name', 'regions', 'token']
        
         extra_kwargs = {
             'password': {'write_only': True},
@@ -89,22 +89,60 @@ class RegisterSerializer(serializers.ModelSerializer):
     def create(self, validated_data):
         validated_data.pop('confirm_password', None)
         token = validated_data.pop('token', None)
+
+
+        ##
+        is_seller = validated_data.get('is_seller', False)
+        is_buyer = not is_seller
+
+        validated_data['is_seller'] = is_seller
+        validated_data['is_buyer'] = is_buyer
+        print(f"Creating user with is_seller={is_seller} and is_buyer={is_buyer}")
         
+        # user = User.objects.create_user(
+            
+        #     username=validated_data['username'], ##email to username
+        #     email=validated_data['email'], 
+        #     password=validated_data['password'],
+            
+        #     ##
+        #     address=validated_data['address'],
+        #     contact_number=validated_data['contact_number']
+        #     **{key: value for key, value in validated_data.items() if key not in ['is_seller', 'agency_name', 'regions']}
+        # )
         user = User.objects.create_user(
-            username=validated_data['email'], 
+            username=validated_data['username'],
             email=validated_data['email'], 
             password=validated_data['password'],
-            **{key: value for key, value in validated_data.items() if key not in ['is_seller', 'agency_name', 'regions']}
+            address=validated_data.get('address'),
+            contact_number=validated_data.get('contact_number'),
+            is_seller=is_seller,
+            is_buyer=is_buyer
         )
 
-        if validated_data.get('is_seller'):
+        # if validated_data.get('is_seller'):            
+        #     seller_profile = Seller.objects.create(
+        #         user=user,                 
+        #         agency_name=validated_data['agency_name']
+
+        #     )
+        #     seller_profile.regions.set(validated_data['regions'])
+        # else:
+        #     Buyer.objects.create(user=user)
+        if is_seller:
+            
             seller_profile = Seller.objects.create(
                 user=user, 
-                agency_name=validated_data['agency_name']
+                agency_name=validated_data['agency_name'],
+                
             )
             seller_profile.regions.set(validated_data['regions'])
         else:
-            Buyer.objects.create(user=user)
+            
+            Buyer.objects.create(
+                user=user,
+                
+            )
 
         return {
             'validated_data': validated_data,

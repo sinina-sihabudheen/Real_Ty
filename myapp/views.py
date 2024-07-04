@@ -30,7 +30,7 @@ class GoogleLogin(SocialLoginView):
 
 class CustomLoginView(APIView):
     permission_classes = []
-    print("AAAAAAAAAAAAAAAAAAAAAAA")
+    
 
     def post(self, request, *args, **kwargs):
         print("WWWWWWWWWWWWWWWWWWW")
@@ -53,9 +53,10 @@ class CustomLoginView(APIView):
 
         refresh = RefreshToken.for_user(user)
 
-        role = 'Buyer' 
-        if hasattr(user, 'seller'):
-            role = 'Seller'
+        # role = 'Buyer' 
+        # if hasattr(user, 'seller'):
+        #     role = 'Seller'
+        role = 'Seller' if user.is_seller else 'Buyer'
 
         return Response({
             'refresh': str(refresh),
@@ -79,7 +80,13 @@ class UserRegistrationView(generics.CreateAPIView):
 
         email = serializer.validated_data['email']
         password = serializer.validated_data['password']
-        is_seller = serializer.validated_data.get('is_seller', False)
+        is_seller = serializer.validated_data.get('is_seller')
+        ##
+        is_buyer = not is_seller  # Determine is_buyer based on is_seller
+        username = serializer.validated_data['username']
+        address = serializer.validated_data['address']
+        contact_number= serializer.validated_data['contact_number']
+
 
         try:
             user = User.objects.get(email=email)
@@ -87,10 +94,18 @@ class UserRegistrationView(generics.CreateAPIView):
         except User.DoesNotExist:
             pass
 
-        username = email 
-        user = User.objects.create_user(username=username, email=email, password=password)
-        
+        # user = User.objects.create_user(username=username, email=email, password=password,address=address,contact_number=contact_number)#address=address,contact_number=contact_number
+        user = User.objects.create_user(
+            username=username,
+            email=email,
+            password=password,
+            address=address,
+            contact_number=contact_number,
+            is_seller=is_seller,
+            is_buyer=is_buyer
+        )
         if is_seller:
+            
             seller_profile = Seller.objects.create(
                 user=user, 
                 agency_name=serializer.validated_data['agency_name']
