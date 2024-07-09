@@ -13,27 +13,38 @@ from .serializers import UserSerializer
 from django.db import transaction
 from rest_framework.permissions import AllowAny,IsAuthenticated
 from django.conf import settings
-
-
+import requests
 from allauth.socialaccount.providers.facebook.views import FacebookOAuth2Adapter
-from allauth.socialaccount.providers.google.views import GoogleOAuth2Adapter
 from dj_rest_auth.registration.views import SocialLoginView
+from django.views.decorators.csrf import csrf_exempt
+
 
 
 User = get_user_model()
 
-class FacebookLogin(SocialLoginView):
-    adapter_class = FacebookOAuth2Adapter
-class GoogleLogin(SocialLoginView):
-    adapter_class = GoogleOAuth2Adapter
+from allauth.socialaccount.providers.google.views import GoogleOAuth2Adapter
+from dj_rest_auth.registration.views import SocialLoginView
+from allauth.socialaccount.providers.oauth2.client import OAuth2Client
 
+
+
+class GoogleLogin(SocialLoginView):
+
+    def __init__(self, *args, **kwargs):
+            super().__init__(*args, **kwargs)
+            
+            try:
+                self.adapter_class = GoogleOAuth2Adapter
+                self.client_class = OAuth2Client 
+                self.callback_url = 'http://localhost:5173/auth/callback'
+            except AttributeError as e:
+                print(f"Error occurred during attribute assignment: {e}")
 
 class CustomLoginView(APIView):
     permission_classes = []
-    
 
+    @csrf_exempt
     def post(self, request, *args, **kwargs):
-        print("WWWWWWWWWWWWWWWWWWW")
         email = request.data.get('email')
         password = request.data.get('password')
         print(email,password)
@@ -53,10 +64,12 @@ class CustomLoginView(APIView):
 
         refresh = RefreshToken.for_user(user)
 
-        # role = 'Buyer' 
-        # if hasattr(user, 'seller'):
-        #     role = 'Seller'
-        role = 'Seller' if user.is_seller else 'Buyer'
+        if user.is_staff:
+            role = 'admin'
+        elif user.is_seller:
+            role = 'seller'
+        else:
+            role = 'buyer'
 
         return Response({
             'refresh': str(refresh),
@@ -127,8 +140,9 @@ class UserRegistrationView(generics.CreateAPIView):
             fail_silently=False,
         )
 
-        print("OTP sent to email.")
-      
+        print("OTP sent to email to:")
+        print(email)
+
         return Response({
             'detail': 'OTP sent successfully',
             'email': email,
@@ -161,7 +175,7 @@ class OTPVerificationView(generics.GenericAPIView):
 
         # Deactivate the device token after successful verification
         device.deactivate()
-        
+        print("OTP deactivated..", )
         return Response({
             'message': 'OTP verified successfully',
             'success':True,
@@ -183,14 +197,20 @@ class ResendOTPView(generics.GenericAPIView):
         except User.DoesNotExist:
             return Response({'detail': 'User not found'}, status=status.HTTP_404_NOT_FOUND)
 
+     
         EmailDevice.objects.filter(user=user, is_active=True).update(is_active=False)
-        self.send_otp(user,email)
+       
+        self.send_otp(user, email)
 
-        return Response({"detail": "OTP resent successfully"}, status=status.HTTP_200_OK)
+        return Response({"message": "OTP resent successfully",
+                         'success': True }, 
+                         status=status.HTTP_200_OK)
 
-    def send_otp(self, user,email):
-        device = EmailDevice.objects.create(user=user, email=user.email)
+    def send_otp(self, user, email):
+        device = EmailDevice.objects.create(user=user, email=email)
         device.generate_challenge()
+    
+        print("Resend OTP",device.token)
         send_mail(
             'Your OTP Code',
             f'Your OTP code is {device.token}',
@@ -198,7 +218,8 @@ class ResendOTPView(generics.GenericAPIView):
             [email],
             fail_silently=False,
         )
-
+        return device.token
+    
 class SellerViewSet(viewsets.ModelViewSet):
     queryset = Seller.objects.all()
     serializer_class = SellerSerializer

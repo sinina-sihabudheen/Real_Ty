@@ -6,7 +6,7 @@ from datetime import timedelta
 
 def user_profile_image_path(instance, filename):
     return f'user_{instance.id}/profile/{filename}'
-
+SOCIAL_PROVIDERS={'email':'email','google':'google','facebook':'facebook'}
 class User(AbstractUser):
     email = models.EmailField(unique=True)
     address = models.CharField(max_length=255, blank=True, null=True)
@@ -14,10 +14,11 @@ class User(AbstractUser):
     profile_image = models.ImageField(upload_to=user_profile_image_path, blank=True, null=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
-    social_provider = models.CharField(max_length=50, blank=True, null=True)  
+    social_provider = models.CharField(max_length=50, default=SOCIAL_PROVIDERS.get("email"))  
     social_id = models.CharField(max_length=255, blank=True, null=True)
     is_seller = models.BooleanField(default=False)
     is_buyer = models.BooleanField(default=True)
+    is_admin = models.BooleanField(default=False)
 
     def __str__(self):
         return self.username
@@ -45,6 +46,12 @@ class Buyer(models.Model):
 
     def __str__(self):
         return self.user.username
+    
+class AdminUser(models.Model):
+    user = models.OneToOneField(User, on_delete=models.CASCADE, related_name='admin_profile')
+
+    def __str__(self):
+        return self.user.username
 
 class EmailDevice(models.Model):
     user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='accounts_email_devices')
@@ -58,7 +65,7 @@ class EmailDevice(models.Model):
         self.save()
 
     def is_valid(self):
-        return self.is_active and (timezone.now() < self.created_at + timedelta(minutes=2))
+        return self.is_active and (timezone.now() < self.created_at + timedelta(minutes=1))
 
     def verify_token(self, token):
         return self.token == token

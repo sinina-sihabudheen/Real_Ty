@@ -8,12 +8,12 @@
 # admin.site.register(Region)
 
 from django.contrib import admin
-from .models import User, Region, Seller, Buyer 
+from .models import User, Region, Seller, Buyer, EmailDevice
 # Register your models here
 
 @admin.register(User)
 class UserAdmin(admin.ModelAdmin):
-    list_display = ['username', 'email', 'contact_number', 'address', 'is_seller', 'is_buyer']
+    list_display = ['username', 'email', 'contact_number', 'address', 'is_seller', 'is_buyer','is_admin','created_at']
     list_filter = ['is_seller', 'is_buyer']
     search_fields = ['username', 'email']
 
@@ -30,5 +30,9 @@ class SellerAdmin(admin.ModelAdmin):
 @admin.register(Buyer)
 class BuyerAdmin(admin.ModelAdmin):
     list_display = ['user']
+
+@admin.register(EmailDevice)
+class EamilDeviceAdmin(admin.ModelAdmin):
+    list_display = ['email', 'token', 'created_at', 'is_active']
 
 

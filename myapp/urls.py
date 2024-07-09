@@ -4,6 +4,7 @@ from rest_framework.routers import DefaultRouter
 from .views import UserRegistrationView, OTPVerificationView, CustomLoginView, ResendOTPView
 from .views import RegionViewSet,UserDetailView
 
+
 router = DefaultRouter()
 router.register(r'regions', RegionViewSet, basename='region')
 
