@@ -16,6 +16,7 @@ class User(AbstractUser):
     updated_at = models.DateTimeField(auto_now=True)
     social_provider = models.CharField(max_length=50, default=SOCIAL_PROVIDERS.get("email"))  
     social_id = models.CharField(max_length=255, blank=True, null=True)
+    date_of_birth = models.DateField(null=True, blank=True)
     is_seller = models.BooleanField(default=False)
     is_buyer = models.BooleanField(default=True)
     is_admin = models.BooleanField(default=False)

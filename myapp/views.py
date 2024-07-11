@@ -1,11 +1,13 @@
 from rest_framework import viewsets, status, generics, serializers
 from rest_framework.response import Response
 from rest_framework.decorators import action
-from django.contrib.auth import get_user_model
+from django.contrib.auth import get_user_model, update_session_auth_hash
+from django.contrib.auth.password_validation import validate_password
+
 from rest_framework_simplejwt.tokens import RefreshToken
 from django.core.mail import send_mail
 from .models import User,Seller, LandProperty, ResidentialProperty, EmailDevice, Region, Buyer
-from .serializers import SellerSerializer, RegionSerializer, LandPropertySerializer, ResidentialPropertySerializer, RegisterSerializer, OTPSerializer, OTPVerificationSerializer, ResendOTPSerializer
+from .serializers import SellerSerializer, RegionSerializer, LandPropertySerializer, ResidentialPropertySerializer, RegisterSerializer, OTPVerificationSerializer, ResendOTPSerializer, PasswordChangeSerializer
 from rest_framework.views import APIView
 from django.core.exceptions import ObjectDoesNotExist
 from django.contrib.auth import authenticate
@@ -17,7 +19,7 @@ import requests
 from allauth.socialaccount.providers.facebook.views import FacebookOAuth2Adapter
 from dj_rest_auth.registration.views import SocialLoginView
 from django.views.decorators.csrf import csrf_exempt
-
+from django.utils.decorators import method_decorator
 
 
 User = get_user_model()
@@ -40,33 +42,93 @@ class GoogleLogin(SocialLoginView):
             except AttributeError as e:
                 print(f"Error occurred during attribute assignment: {e}")
 
-class CustomLoginView(APIView):
+# class CustomLoginView(APIView):
+#     permission_classes = []
+#     @csrf_exempt
+#     def post(self, request, *args, **kwargs):
+#         email = request.data.get('email')
+#         password = request.data.get('password')
+
+#         if email is None or password is None:
+#             return Response({'error': 'Please provide both email and password'}, status=status.HTTP_400_BAD_REQUEST)
+
+#         print(f"Attempting to authenticate with email: {email}, {password}")
+        
+#         user = authenticate(request, email=email, password=password)
+
+#         print(f"Authentication result: {user}")
+
+#         if user is None:
+#             print(f"Failed login attempt with email: {email}")
+#             return Response({'error': 'Invalid credentials'}, status=status.HTTP_401_UNAUTHORIZED)
+
+#         refresh = RefreshToken.for_user(user)
+
+#         if user.is_staff:
+#             role = 'admin'
+#         elif user.is_seller:
+#             role = 'seller'
+#         else:
+#             role = 'buyer'
+
+#         return Response({
+#             'refresh': str(refresh),
+#             'access': str(refresh.access_token),
+#             'role': role,
+#         }, status=status.HTTP_200_OK)
+
+@method_decorator(csrf_exempt, name='dispatch')
+class AdminLoginView(APIView):
     permission_classes = []
 
-    @csrf_exempt
     def post(self, request, *args, **kwargs):
         email = request.data.get('email')
         password = request.data.get('password')
-        print(email,password)
 
         if email is None or password is None:
             return Response({'error': 'Please provide both email and password'}, status=status.HTTP_400_BAD_REQUEST)
 
-        print(f"Attempting to authenticate with email: {email}")
+        try:
+            user = User.objects.get(email=email)
+            if not user.check_password(password) or not user.is_staff:
+                return Response({'error': 'Invalid credentials'}, status=status.HTTP_401_UNAUTHORIZED)
+        except User.DoesNotExist:
+            return Response({'error': 'Invalid credentials'}, status=status.HTTP_401_UNAUTHORIZED)
+
+        refresh = RefreshToken.for_user(user)
+
+        return Response({
+            'refresh': str(refresh),
+            'access': str(refresh.access_token),
+            'role': 'admin',
+        }, status=status.HTTP_200_OK)
+    
+@method_decorator(csrf_exempt, name='dispatch')
+class CustomLoginView(APIView):
+    permission_classes = []
+
+    def post(self, request, *args, **kwargs):
+        email = request.data.get('email')
+        password = request.data.get('password')
+
+        if email is None or password is None:
+            return Response({'error': 'Please provide both email and password'}, status=status.HTTP_400_BAD_REQUEST)
+
+        print(f"Attempting to authenticate with email: {email}, {password}")
         
-        user = authenticate(request, email=email, password=password)
-
-        print(f"Authentication result: {user}")
-
-        if user is None:
+        
+        try:
+            user = User.objects.get(email=email)
+            if not user.check_password(password):
+                print(f"Failed login attempt with email: {email}")
+                return Response({'error': 'Invalid credentials'}, status=status.HTTP_401_UNAUTHORIZED)
+        except User.DoesNotExist:
             print(f"Failed login attempt with email: {email}")
             return Response({'error': 'Invalid credentials'}, status=status.HTTP_401_UNAUTHORIZED)
 
         refresh = RefreshToken.for_user(user)
 
-        if user.is_staff:
-            role = 'admin'
-        elif user.is_seller:
+        if user.is_seller:
             role = 'seller'
         else:
             role = 'buyer'
@@ -95,7 +157,7 @@ class UserRegistrationView(generics.CreateAPIView):
         password = serializer.validated_data['password']
         is_seller = serializer.validated_data.get('is_seller')
         ##
-        is_buyer = not is_seller  # Determine is_buyer based on is_seller
+        is_buyer = not is_seller 
         username = serializer.validated_data['username']
         address = serializer.validated_data['address']
         contact_number= serializer.validated_data['contact_number']
@@ -173,7 +235,6 @@ class OTPVerificationView(generics.GenericAPIView):
         except User.DoesNotExist:
             return Response({"message": 'User not found', "success":False}, status=status.HTTP_404_NOT_FOUND)
 
-        # Deactivate the device token after successful verification
         device.deactivate()
         print("OTP deactivated..", )
         return Response({
@@ -238,6 +299,42 @@ class LandPropertyViewSet(viewsets.ModelViewSet):
 class ResidentialPropertyViewSet(viewsets.ModelViewSet):
     queryset = ResidentialProperty.objects.all()
     serializer_class = ResidentialPropertySerializer
+
+class UpdateUserView(generics.UpdateAPIView):
+    print("UPDATE...")
+    serializer_class = UserSerializer
+    permission_classes = [IsAuthenticated]
+
+    def get_object(self):
+        return self.request.user
+
+    def put(self, request, *args, **kwargs):
+        user = self.get_object()
+        serializer = self.get_serializer(user, data=request.data, partial=True)
+        if serializer.is_valid():
+            serializer.save()
+            return Response(serializer.data, status=status.HTTP_200_OK)
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+class ChangePasswordView(generics.UpdateAPIView):
+    serializer_class = PasswordChangeSerializer
+    model = User
+    permission_classes = [IsAuthenticated]
+
+    def get_object(self):
+        return self.request.user
+
+    def update(self, request, *args, **kwargs):
+        user = self.get_object()
+        serializer = self.get_serializer(data=request.data)
+        if serializer.is_valid():
+            if not user.check_password(serializer.data.get("current_password")):
+                return Response({"current_password": ["Wrong password."]}, status=status.HTTP_400_BAD_REQUEST)
+            user.set_password(serializer.data.get("new_password"))
+            user.save()
+            update_session_auth_hash(request, user)
+            return Response({"detail": "Password updated successfully"}, status=status.HTTP_200_OK)
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
 
 
