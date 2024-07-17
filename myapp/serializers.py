@@ -131,6 +131,15 @@ class RegisterSerializer(serializers.ModelSerializer):
             'token': token
         }
 
+class ForgotPasswordSerializer(serializers.Serializer):
+    email = serializers.EmailField()
+
+class ResetPasswordSerializer(serializers.Serializer):
+    email = serializers.EmailField()
+    otp = serializers.CharField()
+    password = serializers.CharField()
+    confirm_password = serializers.CharField()
+
 class SellerSerializer(serializers.ModelSerializer):
     user = UserSerializer()
     regions = RegionSerializer(many=True)
@@ -207,3 +216,42 @@ class PasswordChangeSerializer(serializers.Serializer):
     def validate_new_password(self, value):
         validate_password(value)
         return value
+    
+    def update(self, instance, validated_data):
+        instance.set_password(validated_data['new_password'])
+        instance.save()
+        return instance
+    
+class UpdateUserRoleSerializer(serializers.ModelSerializer):
+    agency_name = serializers.CharField(required=False)
+    regions = serializers.ListField(
+        child=serializers.IntegerField(), required=False
+    )
+
+    class Meta:
+        model = User
+        fields = ['is_seller', 'is_buyer', 'agency_name', 'regions']
+
+    def update(self, instance, validated_data):
+        is_seller = validated_data.get('is_seller', instance.is_seller)
+        is_buyer = validated_data.get('is_buyer', instance.is_buyer)
+        agency_name = validated_data.get('agency_name', None)
+        regions_data = validated_data.get('regions', [])
+
+        instance.is_seller = is_seller
+        instance.is_buyer = is_buyer
+        instance.save()
+
+        if is_seller:
+            seller, created = Seller.objects.get_or_create(user=instance)
+            if agency_name:
+                seller.agency_name = agency_name
+            if regions_data:
+                regions = Region.objects.filter(id__in=regions_data)
+                seller.regions.set(regions)
+            seller.save()
+
+        if is_buyer:
+            Buyer.objects.get_or_create(user=instance)
+
+        return instance

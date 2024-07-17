@@ -10,6 +10,7 @@ For the full list of settings and their values, see
 https://docs.djangoproject.com/en/5.0/ref/settings/
 """
 
+import os
 from pathlib import Path
 from datetime import timedelta
 from decouple import config
@@ -89,19 +90,12 @@ MIDDLEWARE = [
 ]
 
 
-AUTHENTICATION_BACKENDS = [
-    
+AUTHENTICATION_BACKENDS = [    
     'django.contrib.auth.backends.ModelBackend', 
     # 'myapp.backends.EmailBackend',
-    'allauth.account.auth_backends.AuthenticationBackend', 
-    'social_core.backends.facebook.FacebookOAuth2',
-    'social_core.backends.google.GoogleOAuth2',
-
+    'allauth.account.auth_backends.AuthenticationBackend',
     
 ]
-
-
-
 
 CORS_ALLOWED_ORIGINS = [
     'http://localhost:5173',
@@ -111,7 +105,14 @@ CORS_ORIGIN_ALLOW_ALL = True
 
 CSRF_TRUSTED_ORIGINS = [
     'http://localhost:5173',
+    # 'http://localhost:8000',
 ]
+
+# SESSION_COOKIE_SECURE = True
+
+CSRF_COOKIE_SECURE=False
+CSRF_COOKIE_HTTPONLY=False
+
 
 CORS_ALLOW_CREDENTIALS = True
 
@@ -268,13 +269,15 @@ USE_I18N = True
 
 USE_TZ = True
 
-
-
-
-STATIC_URL = 'static/'
-
-MEDIA_ROOT = BASE_DIR / 'media'
 MEDIA_URL = '/media/'
+MEDIA_ROOT = os.path.join(BASE_DIR, 'media')
+
+STATIC_URL = '/static/'
+STATIC_ROOT = os.path.join(BASE_DIR, 'static')
+
+# MEDIA_ROOT = BASE_DIR / 'media'
+
+
 
 
 

@@ -1,7 +1,8 @@
 from django.db import models
 from django.utils import timezone
 from django.contrib.auth.models import AbstractUser
-import secrets
+# import secrets
+import random
 from datetime import timedelta
 
 def user_profile_image_path(instance, filename):
@@ -62,7 +63,9 @@ class EmailDevice(models.Model):
     is_active = models.BooleanField(default=True)
 
     def generate_challenge(self):
-        self.token = secrets.token_hex(3)  
+        # self.token = secrets.token_hex(3)  
+        # self.save()
+        self.token = ''.join(random.choice('0123456789') for _ in range(6))
         self.save()
 
     def is_valid(self):
