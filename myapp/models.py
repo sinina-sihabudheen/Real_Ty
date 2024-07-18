@@ -1,7 +1,6 @@
 from django.db import models
 from django.utils import timezone
 from django.contrib.auth.models import AbstractUser
-# import secrets
 import random
 from datetime import timedelta
 
@@ -65,8 +64,6 @@ class EmailDevice(models.Model):
     is_active = models.BooleanField(default=True)
 
     def generate_challenge(self):
-        # self.token = secrets.token_hex(3)  
-        # self.save()
         self.token = ''.join(random.choice('0123456789') for _ in range(6))
         self.save()
 
@@ -125,3 +122,40 @@ class ResidentialProperty(models.Model):
 
     def __str__(self):
         return f"{self.property_type}: {self.location}"
+    
+
+class Subscription(models.Model):
+    seller = models.ForeignKey(Seller, on_delete=models.CASCADE)
+    SUBSCRIPTION_TYPES = (
+        ('monthly', 'Monthly'),
+        ('yearly', 'Yearly'),
+    )
+    subscription_type = models.CharField(max_length=20, choices=SUBSCRIPTION_TYPES)
+    
+    PAYMENT_PLANS = (
+        ('free', 'Free'),
+        ('basic', 'Basic'),
+        ('premium', 'Premium'),
+    )
+    payment_plan = models.CharField(max_length=20, choices=PAYMENT_PLANS, default='free')
+    
+    started_at = models.DateField(auto_now_add=True)
+    ended_at = models.DateField(null=True, blank=True)
+    
+class SubscriptionPayment(models.Model):
+    subscription = models.ForeignKey(Subscription, on_delete=models.CASCADE)
+    user = models.ForeignKey(Seller, on_delete=models.CASCADE)
+    amount = models.DecimalField(max_digits=10, decimal_places=2)
+    payment_date = models.DateField(default=timezone.now)
+    expiry_date = models.DateField()
+    
+    PAYMENT_STATUSES = (
+        ('paid', 'Paid'),
+        ('pending', 'Pending'),
+        ('failed', 'Failed'),
+    )
+    payment_status = models.CharField(max_length=10, choices=PAYMENT_STATUSES)
+    
+    transaction_id = models.CharField(max_length=100)
+
+
