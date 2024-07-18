@@ -114,7 +114,7 @@ class CustomLoginView(APIView):
 class RegionViewSet(viewsets.ReadOnlyModelViewSet):
     permission_classes = [AllowAny]
     queryset = Region.objects.all()
-    serializer_class = RegionSerializer  
+    serializer_class = RegionSerializer 
 
 
 class UserRegistrationView(generics.CreateAPIView):
@@ -392,82 +392,67 @@ class ResetPasswordView(generics.GenericAPIView):
 
 ##Admin side lists
 
-class SellerAPIView(APIView):
-    def get(self, request, *args, **kwargs):
-        sellers = Seller.objects.all()
-        serializer = SellerSerializer(sellers, many=True)
-        return Response(serializer.data)
-
-    def post(self, request, *args, **kwargs):
-        serializer = SellerSerializer(data=request.data)
-        if serializer.is_valid():
-            serializer.save()
-            return Response(serializer.data, status=status.HTTP_201_CREATED)
-        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
-
-    def put(self, request, *args, **kwargs):
-        seller = Seller.objects.get(pk=kwargs['pk'])
-        serializer = SellerSerializer(seller, data=request.data)
-        if serializer.is_valid():
-            serializer.save()
-            return Response(serializer.data)
-        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
-
-    def delete(self, request, *args, **kwargs):
-        seller = Seller.objects.get(pk=kwargs['pk'])
-        seller.delete()
-        return Response(status=status.HTTP_204_NO_CONTENT)
+# List users
+class UserListAPIView(generics.ListAPIView):
+    # queryset = User.objects.all()
+    serializer_class = UserSerializer
+    def get_queryset(self):
+     
+        return User.objects.exclude(is_admin=True)
 
 
-class BuyerAPIView(APIView):
-    def get(self, request, *args, **kwargs):
-        buyers = Buyer.objects.all()
-        serializer = BuyerSerializer(buyers, many=True)
-        return Response(serializer.data)
-
-    def post(self, request, *args, **kwargs):
-        serializer = BuyerSerializer(data=request.data)
-        if serializer.is_valid():
-            serializer.save()
-            return Response(serializer.data, status=status.HTTP_201_CREATED)
-        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
-
-    def put(self, request, *args, **kwargs):
-        buyer = Buyer.objects.get(pk=kwargs['pk'])
-        serializer = BuyerSerializer(buyer, data=request.data)
-        if serializer.is_valid():
-            serializer.save()
-            return Response(serializer.data)
-        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
-
-    def delete(self, request, *args, **kwargs):
-        buyer = Buyer.objects.get(pk=kwargs['pk'])
-        buyer.delete()
-        return Response(status=status.HTTP_204_NO_CONTENT)
-
-
-class UserAPIView(APIView):
-    def get(self, request, *args, **kwargs):
-        users = User.objects.all()
-        serializer = UserSerializer(users, many=True)
-        return Response(serializer.data)
-
-    def post(self, request, *args, **kwargs):
-        serializer = UserSerializer(data=request.data)
-        if serializer.is_valid():
-            serializer.save()
-            return Response(serializer.data, status=status.HTTP_201_CREATED)
-        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
-
-    def put(self, request, *args, **kwargs):
+# Custom view to block a user
+class UserBlockAPIView(APIView):
+    
+    def patch(self, request, *args, **kwargs):
         user = User.objects.get(pk=kwargs['pk'])
-        serializer = UserSerializer(user, data=request.data)
+        user.is_active = False 
+        user.save()
+        serializer = UserSerializer(user)
+        return Response(serializer.data, status=status.HTTP_200_OK)
+     
+   # List and block sellers
+class SellerListAPIView(generics.ListAPIView):
+    queryset = Seller.objects.all()
+    serializer_class = SellerSerializer
+
+class SellerBlockAPIView(APIView):
+    
+    def patch(self, request, *args, **kwargs):
+        seller = Seller.objects.get(pk=kwargs['pk'])
+        seller.is_active = False  # or any other logic to block the seller
+        seller.save()
+        serializer = SellerSerializer(seller)
+        return Response(serializer.data, status=status.HTTP_200_OK)
+
+# List and block buyers
+class BuyerListAPIView(generics.ListAPIView):
+    queryset = Buyer.objects.all()
+    serializer_class = BuyerSerializer
+
+class BuyerBlockAPIView(APIView):
+    
+    def patch(self, request, *args, **kwargs):
+        buyer = Buyer.objects.get(pk=kwargs['pk'])
+        buyer.is_active = False  # or any other logic to block the buyer
+        buyer.save()
+        serializer = BuyerSerializer(buyer)
+        return Response(serializer.data, status=status.HTTP_200_OK)
+    
+class RegionCreateAPIView(APIView):
+    def post(self, request):
+        serializer = RegionSerializer(data=request.data)
         if serializer.is_valid():
             serializer.save()
-            return Response(serializer.data)
+            return Response(serializer.data, status=status.HTTP_201_CREATED)
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
-    def delete(self, request, *args, **kwargs):
-        user = User.objects.get(pk=kwargs['pk'])
-        user.delete()
+class RegionDeleteAPIView(APIView):
+    def delete(self, request, pk):
+        try:
+            region = Region.objects.get(pk=pk)
+        except Region.DoesNotExist:
+            return Response({'error': 'Region not found'}, status=status.HTTP_404_NOT_FOUND)
+
+        region.delete()
         return Response(status=status.HTTP_204_NO_CONTENT)

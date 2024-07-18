@@ -10,7 +10,7 @@ class UserAdmin(admin.ModelAdmin):
 
 @admin.register(Region)
 class RegionAdmin(admin.ModelAdmin):
-    list_display = ['name']
+    list_display = ['name','is_active']
 
 @admin.register(Seller)
 class SellerAdmin(admin.ModelAdmin):

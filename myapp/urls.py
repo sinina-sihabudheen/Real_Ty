@@ -3,8 +3,8 @@ from django.urls import path,include
 from rest_framework.routers import DefaultRouter
 from .views import UserRegistrationView, OTPVerificationView, CustomLoginView, ResendOTPView,ForgotPasswordView
 from .views import RegionViewSet,UserDetailView, UpdateUserView, ChangePasswordView, AdminLoginView, UpdateUserRole, ResetPasswordView
-from .views import SellerAPIView, BuyerAPIView, UserAPIView
-
+from .views import UserListAPIView, UserBlockAPIView, SellerListAPIView, SellerBlockAPIView, BuyerListAPIView, BuyerBlockAPIView
+from . import views
 
 
 router = DefaultRouter()
@@ -23,9 +23,18 @@ urlpatterns = [
     path('upadate_role/', UpdateUserRole.as_view(),name='update_role'),
     path('forgot_password/', ForgotPasswordView.as_view,name='forgot_password'),
     path('reset_password/', ResetPasswordView.as_view,name='reset_password'),
-    path('users_list', UserAPIView.as_view, name='users_list'),
-    path('sellers_list', SellerAPIView.as_view, name='sellers_list'),
-    path('buyers_list', BuyerAPIView.as_view, name='buyers_list'),
 
+    path('users_list/', UserListAPIView.as_view(), name='users_list'),
+    path('users/<int:pk>/block/', UserBlockAPIView.as_view(), name='block_user'),
+
+    path('sellers_list/', SellerListAPIView.as_view(), name='sellers_list'),
+    path('sellers/<int:pk>/block/', SellerBlockAPIView.as_view(), name='block_seller'),
+    
+    path('buyers_list/', BuyerListAPIView.as_view(), name='buyers_list'),
+    path('buyers/<int:pk>/block/', BuyerBlockAPIView.as_view(), name='block_buyer'),
+  
+    path('api/regions/create/', views.RegionCreateAPIView.as_view(), name='region-create'),
+    path('api/regions/<int:pk>/delete/', views.RegionDeleteAPIView.as_view(), name='region-delete'),
 ]
+
 
