@@ -5,16 +5,20 @@ import random
 from datetime import timedelta
 
 def user_profile_image_path(instance, filename):
-    return f'user_{instance.id}/profile/{filename}'
+    # return f'user_{instance.id}/profile/{filename}'
+    return 'images/{filename}'.format(filename=filename)
+
 SOCIAL_PROVIDERS={'email':'email','google':'google','facebook':'facebook'}
 class User(AbstractUser):
     email = models.EmailField(unique=True)
     address = models.CharField(max_length=255, blank=True, null=True)
     contact_number = models.CharField(max_length=15, blank=True, null=True)
+
     profile_image = models.ImageField(upload_to=user_profile_image_path, blank=True, null=True)
+    
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
-    social_provider = models.CharField(max_length=50, default=SOCIAL_PROVIDERS.get("email"))  
+    social_provider = models.CharField(max_length=50, default=SOCIAL_PROVIDERS.items(),blank=True, null=True)  
     social_id = models.CharField(max_length=255, blank=True, null=True)
     date_of_birth = models.DateField(null=True, blank=True)
     is_seller = models.BooleanField(default=False)
@@ -97,8 +101,8 @@ class LandProperty(models.Model):
     location = models.CharField(max_length=255)
     images = models.ImageField(upload_to='property_images/', blank=True, null=True)
     video = models.FileField(upload_to='property_videos/', blank=True, null=True)
-    description = models.TextField()
-
+    description = models.TextField(blank=True, null=True)
+    amenities = models.ManyToManyField(Amenity)
     def __str__(self):
         return f"Land: {self.location}"
 
@@ -107,7 +111,6 @@ class ResidentialProperty(models.Model):
         ('Villa', 'Villa'),
         ('Apartment', 'Apartment'),
     ]
-
     seller = models.ForeignKey(Seller, on_delete=models.CASCADE, related_name='residential_properties')
     category = models.ForeignKey(PropertyCategory, on_delete=models.CASCADE, related_name='residential_properties')
     property_type = models.CharField(max_length=50, choices=PROPERTY_TYPE_CHOICES)
@@ -117,13 +120,14 @@ class ResidentialProperty(models.Model):
     num_bathrooms = models.IntegerField()
     size = models.DecimalField(max_digits=10, decimal_places=2, help_text='Size in square feet')
     amenities = models.ManyToManyField(Amenity)
-    description = models.TextField()
+    description = models.TextField(blank=True, null=True)
     land_area = models.DecimalField(max_digits=10, decimal_places=2, blank=True, null=True, help_text='Land area in cents (only for villas)')
-
+    images = models.ImageField(upload_to='property_images/', blank=True, null=True)
+    video = models.FileField(upload_to='property_videos/', blank=True, null=True)
+    
     def __str__(self):
         return f"{self.property_type}: {self.location}"
     
-
 class Subscription(models.Model):
     seller = models.ForeignKey(Seller, on_delete=models.CASCADE)
     SUBSCRIPTION_TYPES = (
@@ -133,7 +137,6 @@ class Subscription(models.Model):
     subscription_type = models.CharField(max_length=20, choices=SUBSCRIPTION_TYPES)
     
     PAYMENT_PLANS = (
-        ('free', 'Free'),
         ('basic', 'Basic'),
         ('premium', 'Premium'),
     )

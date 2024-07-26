@@ -15,6 +15,8 @@ from pathlib import Path
 from datetime import timedelta
 from decouple import config
 
+
+
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
 
@@ -65,7 +67,7 @@ INSTALLED_APPS = [
     'allauth.account',
     'dj_rest_auth.registration',
     'allauth.socialaccount',
-    'allauth.socialaccount.providers.facebook',
+    # 'allauth.socialaccount.providers.facebook',
     'allauth.socialaccount.providers.google',
 
 #For OTP  
@@ -85,6 +87,9 @@ MIDDLEWARE = [
     'django.contrib.messages.middleware.MessageMiddleware',
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
     'allauth.account.middleware.AccountMiddleware', 
+
+    'myapp.middleware.CustomHeaderMiddleware',  
+
 
 
 ]
@@ -122,7 +127,9 @@ AUTH_USER_MODEL = 'myapp.User'
 
 REST_FRAMEWORK = {
     'DEFAULT_AUTHENTICATION_CLASSES': [
-        'rest_framework_simplejwt.authentication.JWTAuthentication'
+        'rest_framework_simplejwt.authentication.JWTAuthentication',
+        'rest_framework.authentication.SessionAuthentication',
+        'rest_framework.authentication.BasicAuthentication',
     ],
     'DEFAULT_PERMISSION_CLASSES': [
         'rest_framework.permissions.IsAuthenticated',
@@ -145,6 +152,7 @@ SOCIALACCOUNT_PROVIDERS = {
         'SCOPE': [
             'profile',
             'email',
+            'openid',
         ],
         'AUTH_PARAMS': {
             'access_type': 'online',
@@ -270,15 +278,14 @@ USE_I18N = True
 USE_TZ = True
 
 MEDIA_URL = '/media/'
-MEDIA_ROOT = os.path.join(BASE_DIR, 'media')
+MEDIA_ROOT = os.path.join(BASE_DIR, 'mediafiles')
+# MEDIA_ROOT = os.path.join(BASE_DIR, 'media')
+
 
 STATIC_URL = '/static/'
 STATIC_ROOT = os.path.join(BASE_DIR, 'static')
 
 # MEDIA_ROOT = BASE_DIR / 'media'
-
-
-
 
 
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'

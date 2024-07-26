@@ -7,9 +7,10 @@ from rest_framework import viewsets
 
 from rest_framework_simplejwt.tokens import RefreshToken
 from django.core.mail import send_mail
-from .models import User,Seller, LandProperty, ResidentialProperty, EmailDevice, Region, Buyer
-from .serializers import SellerSerializer, RegionSerializer, UpdateUserRoleSerializer, LandPropertySerializer, ResidentialPropertySerializer, RegisterSerializer
+from .models import User,Seller, LandProperty, ResidentialProperty, EmailDevice, Region, Buyer, Amenity, PropertyCategory
+from .serializers import SellerSerializer, RegionSerializer, UpdateUserRoleSerializer, LandPropertySerializer, ResidentialPropertySerializer, RegisterSerializer, AmenitySerializer
 from .serializers import OTPVerificationSerializer, ResendOTPSerializer, PasswordChangeSerializer, ForgotPasswordSerializer, ResetPasswordSerializer, BuyerSerializer
+from .serializers import RegisterResidentialPropertySerializer, RegisterLandPropertySerializer
 from rest_framework.views import APIView
 from django.core.exceptions import ObjectDoesNotExist
 from django.contrib.auth import authenticate
@@ -22,6 +23,8 @@ from allauth.socialaccount.providers.facebook.views import FacebookOAuth2Adapter
 from dj_rest_auth.registration.views import SocialLoginView
 from django.views.decorators.csrf import csrf_exempt
 from django.utils.decorators import method_decorator
+from rest_framework.parsers import MultiPartParser, FormParser
+
 
 
 
@@ -30,19 +33,53 @@ User = get_user_model()
 from allauth.socialaccount.providers.google.views import GoogleOAuth2Adapter
 from dj_rest_auth.registration.views import SocialLoginView
 from allauth.socialaccount.providers.oauth2.client import OAuth2Client
+from django.http import JsonResponse
 
+from google.oauth2 import id_token
+from google.auth.transport import requests as google_requests
 
-
-class GoogleLogin(SocialLoginView):
-    adapter_class = GoogleOAuth2Adapter
-    client_class = OAuth2Client
+class GoogleLoginView(APIView):
+    permission_classes = [AllowAny]
 
     def post(self, request, *args, **kwargs):
+        print("ENTERED INTO GOOGLE")
+        token = request.data.get('token')
+        if not token:
+            return Response({'error': 'No token provided'}, status=status.HTTP_400_BAD_REQUEST)
         try:
-            return super().post(request, *args, **kwargs)
-        except Exception as e:
-            return Response({'error': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+            print(token)
 
+            payload = id_token.verify_oauth2_token(token, google_requests.Request(), settings.GOOGLE_CLIENT_ID)
+            print(payload)
+            if payload['iss'] not in ['accounts.google.com', 'https://accounts.google.com']:
+                raise ValueError('Wrong issuer.')
+        except ValueError:
+            return Response({'error': 'Invalid token'}, status=status.HTTP_400_BAD_REQUEST)
+
+        email = payload['email']
+        name = payload.get('name', '')
+        print("email ",email)
+
+        user, created = User.objects.get_or_create(email=email, defaults={
+            'username': name,
+            'social_provider': 'google', 
+        })
+        if user.is_seller and user.is_buyer:
+            role = ['buyer','seller']
+        elif user.is_buyer:
+            role = ['buyer']
+        elif user.is_seller :
+            role = ['seller']
+        else:
+            return Response({'error': 'Invalid role'}, status=status.HTTP_401_UNAUTHORIZED)
+
+        refresh = RefreshToken.for_user(user)
+        return Response({
+            'refresh': str(refresh),
+            'access': str(refresh.access_token),
+            'role': role
+            }, status=status.HTTP_200_OK)
+    
 class AdminLoginView(APIView):
     permission_classes = []
 
@@ -97,13 +134,14 @@ class CustomLoginView(APIView):
 
         refresh = RefreshToken.for_user(user)
 
-        if user.is_seller:
-            role = 'seller'
+        if user.is_seller and user.is_buyer:
+            role = ['buyer','seller']
         elif user.is_buyer:
-            role = 'buyer'
+            role = ['buyer']
+        elif user.is_seller :
+            role = ['seller']
         else:
             return Response({'error': 'Invalid role'}, status=status.HTTP_401_UNAUTHORIZED)
-
 
         return Response({
             'refresh': str(refresh),
@@ -257,31 +295,133 @@ class UserDetailView(generics.RetrieveAPIView):
 
     def get_object(self):
         return self.request.user
+    
+class RegisterLandsViewSet(viewsets.ModelViewSet):
+    queryset = LandProperty.objects.all()
+    serializer_class = RegisterLandPropertySerializer
+    permission_classes = [IsAuthenticated]
+    images = serializers.ListField(child=serializers.ImageField(), required=True)
+    video = serializers.FileField(required=False)
 
-class LandPropertyViewSet(viewsets.ModelViewSet):
+
+    def perform_create(self, serializer):
+        category_name = self.request.data.get('category')
+        seller = self.request.user
+        
+        try:
+            seller = Seller.objects.get(user=seller)
+        except Seller.DoesNotExist:
+            raise serializers.ValidationError({'seller': 'Seller instance does not exist for the current user.'})
+        
+        try:
+            category = PropertyCategory.objects.get(name=category_name)            
+        except PropertyCategory.DoesNotExist:
+            raise serializers.ValidationError({'category': 'Category does not exist.'})
+        
+        serializer.save(category=category, seller=seller)
+
+class RegisterResidentialsViewSet(viewsets.ModelViewSet):
+    queryset = ResidentialProperty.objects.all()
+    serializer_class = RegisterResidentialPropertySerializer
+    permission_classes = [IsAuthenticated]
+    images = serializers.ListField(child=serializers.ImageField(), required=True)
+    video = serializers.FileField(required=False)
+
+
+    def perform_create(self, serializer):
+        category_name = self.request.data.get('category')
+        seller = self.request.user
+
+        try:
+            seller = Seller.objects.get(user=seller)
+
+        except Seller.DoesNotExist:
+            raise serializers.ValidationError({'seller': 'Seller instance does not exist for the current user.'})
+        
+        if not category_name:
+            raise serializers.ValidationError({'category': 'Category is required.'})
+
+        try:
+            category = PropertyCategory.objects.get(name=category_name)
+
+        except PropertyCategory.DoesNotExist:
+            raise serializers.ValidationError({'category': 'Category does not exist.'})
+
+        serializer.save(category=category, seller=seller)
+
+# class SellerLandsViewSet(viewsets.ModelViewSet):
+#     serializer_class = LandPropertySerializer
+#     permission_classes = [IsAuthenticated]
+
+#     def get_queryset(self):
+#         user = self.request.user
+#         return LandProperty.objects.filter(seller=user)
+    
+# class SellerResidentsViewSet(viewsets.ModelViewSet):
+#     serializer_class = ResidentialPropertySerializer
+#     permission_classes = [IsAuthenticated]
+
+#     def get_queryset(self):
+#         user = self.request.user
+#         return ResidentialProperty.objects.filter(seller=user)
+
+
+class SellerLandsViewSet(viewsets.ModelViewSet):
+    serializer_class = LandPropertySerializer
+    permission_classes = [IsAuthenticated]
+
+    def get_queryset(self):
+        user = self.request.user
+        try:
+            seller = Seller.objects.get(user=user)
+        except Seller.DoesNotExist:
+            # Handle the case where the Seller instance does not exist
+            return LandProperty.objects.none()  # Return an empty queryset
+        return LandProperty.objects.filter(seller=seller)
+
+
+class SellerResidentsViewSet(viewsets.ModelViewSet):
+    serializer_class = ResidentialPropertySerializer
+    permission_classes = [IsAuthenticated]
+
+    def get_queryset(self):
+        user = self.request.user
+        try:
+            seller = Seller.objects.get(user=user)
+        except Seller.DoesNotExist:
+            return ResidentialProperty.objects.none()  # Return an empty queryset
+        return ResidentialProperty.objects.filter(seller=seller)
+
+
+
+class LandPropertyDetailView(generics.RetrieveUpdateDestroyAPIView):
     queryset = LandProperty.objects.all()
     serializer_class = LandPropertySerializer
+    permission_classes = [IsAuthenticated]
 
-class ResidentialPropertyViewSet(viewsets.ModelViewSet):
+class ResidentialPropertyDetailView(generics.RetrieveUpdateDestroyAPIView):
     queryset = ResidentialProperty.objects.all()
     serializer_class = ResidentialPropertySerializer
+    permission_classes = [IsAuthenticated]
+
+class AmenityViewSet(viewsets.ModelViewSet):
+    queryset = Amenity.objects.all()
+    serializer_class = AmenitySerializer
 
 class UpdateUserView(generics.UpdateAPIView):
     serializer_class = UserSerializer
     permission_classes = [IsAuthenticated]
+    parser_classes = (MultiPartParser, FormParser)
+
 
     def get_object(self):
         return self.request.user
 
     def put(self, request, *args, **kwargs):
-        print("FFFFFFFF")
         user = self.get_object()
-        print("USER",user)
         serializer = self.get_serializer(user, data=request.data, partial=True)
-        print("QQQQQQQQQ")
         if serializer.is_valid():
             serializer.save()
-            print("SSSSSSS")
             return Response(serializer.data, status=status.HTTP_200_OK)
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
@@ -294,7 +434,6 @@ class ChangePasswordView(generics.UpdateAPIView):
         return self.request.user
 
     def post(self, request, *args, **kwargs):
-        print("OOOOO PAASSWWOORD")
         user = self.get_object()
         serializer = self.get_serializer(data=request.data)
         if serializer.is_valid():
@@ -355,18 +494,10 @@ class ForgotPasswordView(generics.GenericAPIView):
             'detail': 'OTP sent successfully',
             'email': email,
         }, status=status.HTTP_200_OK)
-
-
-
-# class ForgotPasswordView(APIView):
-#     permission_classes = [AllowAny]
-
-#     def post(self,request):
-#         print("FORGOT PASSWORD",request)
-#         return Response({"Password Error"})
   
 class ResetPasswordView(generics.GenericAPIView):
     serializer_class = ResetPasswordSerializer
+    permission_classes = [AllowAny] 
 
     def post(self, request, *args, **kwargs):
         serializer = self.get_serializer(data=request.data)
@@ -394,14 +525,11 @@ class ResetPasswordView(generics.GenericAPIView):
 
 # List users
 class UserListAPIView(generics.ListAPIView):
-    # queryset = User.objects.all()
     serializer_class = UserSerializer
     def get_queryset(self):
      
         return User.objects.exclude(is_admin=True)
 
-
-# Custom view to block a user
 class UserBlockAPIView(APIView):
     
     def patch(self, request, *args, **kwargs):
@@ -411,7 +539,7 @@ class UserBlockAPIView(APIView):
         serializer = UserSerializer(user)
         return Response(serializer.data, status=status.HTTP_200_OK)
      
-   # List and block sellers
+   # List sellers
 class SellerListAPIView(generics.ListAPIView):
     queryset = Seller.objects.all()
     serializer_class = SellerSerializer
@@ -420,12 +548,12 @@ class SellerBlockAPIView(APIView):
     
     def patch(self, request, *args, **kwargs):
         seller = Seller.objects.get(pk=kwargs['pk'])
-        seller.is_active = False  # or any other logic to block the seller
+        seller.is_active = False 
         seller.save()
         serializer = SellerSerializer(seller)
         return Response(serializer.data, status=status.HTTP_200_OK)
 
-# List and block buyers
+# List buyers
 class BuyerListAPIView(generics.ListAPIView):
     queryset = Buyer.objects.all()
     serializer_class = BuyerSerializer
@@ -434,7 +562,7 @@ class BuyerBlockAPIView(APIView):
     
     def patch(self, request, *args, **kwargs):
         buyer = Buyer.objects.get(pk=kwargs['pk'])
-        buyer.is_active = False  # or any other logic to block the buyer
+        buyer.is_active = False 
         buyer.save()
         serializer = BuyerSerializer(buyer)
         return Response(serializer.data, status=status.HTTP_200_OK)

@@ -1,7 +1,7 @@
 from rest_framework import serializers
 from django.contrib.auth import get_user_model
 from django.core.validators import RegexValidator
-from .models import Seller, LandProperty, ResidentialProperty, EmailDevice, Region, Buyer
+from .models import Seller, LandProperty, ResidentialProperty, EmailDevice, Region, Buyer, Amenity, PropertyCategory
 from django.contrib.auth.password_validation import validate_password
 
 
@@ -12,8 +12,13 @@ class RegionSerializer(serializers.ModelSerializer):
         model = Region
         fields = '__all__'
 
+class AmenitySerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Amenity
+        fields = '__all__'  
+
 class UserSerializer(serializers.ModelSerializer):
-    profile_image = serializers.ImageField(write_only=True, required=False)
+    profile_image = serializers.ImageField(required=False)
 
     class Meta:
         model = User
@@ -47,15 +52,15 @@ class RegisterSerializer(serializers.ModelSerializer):
                         message='Email should only contain letters and "@" or "."'
                     )
                 ]
-            },
-            'username': {
-                'validators': [
-                    RegexValidator(
-                        regex=r'^[a-zA-Z]*$', 
-                        message='Username should only contain letters'
-                    )
-                ]
             }
+            # 'username': {
+            #     'validators': [
+            #         RegexValidator(
+            #             regex=r'^[a-zA-Z]*$', 
+            #             message='Username should only contain letters'
+            #         )
+            #     ]
+            # }
         }
     def validate_password(self, value):
             if len(value) < 8:
@@ -168,16 +173,61 @@ class BuyerSerializer(serializers.ModelSerializer):
         model = Buyer
         fields = ['id', 'user']
 
-class LandPropertySerializer(serializers.ModelSerializer):
+class RegisterLandPropertySerializer(serializers.ModelSerializer):
+    amenities = serializers.PrimaryKeyRelatedField(queryset=Amenity.objects.all(), many=True)
+    category = serializers.CharField()  
+    seller = serializers.PrimaryKeyRelatedField(read_only=True)
+
     class Meta:
         model = LandProperty
-        fields = '__all__'
+        fields = ['price', 'description', 'area', 'amenities', 'location', 'images', 'video', 'category', 'seller']
+        
+    def validate_category(self, value):
+        if value and not PropertyCategory.objects.filter(name=value).exists():
+            raise serializers.ValidationError('Category does not exist.')
+        return value
 
-class ResidentialPropertySerializer(serializers.ModelSerializer):
+class RegisterResidentialPropertySerializer(serializers.ModelSerializer):
+    category = serializers.CharField()  
+    amenities = serializers.PrimaryKeyRelatedField(queryset=Amenity.objects.all(),many=True)
+    seller = serializers.PrimaryKeyRelatedField(read_only=True)
+
     class Meta:
         model = ResidentialProperty
-        fields = '__all__'
+        fields = ['seller', 'category', 'property_type', 'price', 'location', 'num_rooms', 'num_bathrooms', 'size', 'amenities', 'description', 'land_area', 'images', 'video']
 
+    def validate_category(self, value):
+        if not PropertyCategory.objects.filter(name=value).exists():
+            raise serializers.ValidationError('Category does not exist.')
+        return value
+    
+class LandPropertySerializer(serializers.ModelSerializer):
+    amenities = serializers.PrimaryKeyRelatedField(queryset=Amenity.objects.all(), many=True)
+    category = serializers.CharField()  
+    seller = serializers.PrimaryKeyRelatedField(read_only=True)
+
+    class Meta:
+        model = LandProperty
+        fields = ['id', 'price', 'description', 'area', 'amenities', 'location', 'images', 'video', 'category', 'seller']
+        
+    def validate_category(self, value):
+        if value and not PropertyCategory.objects.filter(name=value).exists():
+            raise serializers.ValidationError('Category does not exist.')
+        return value
+
+class ResidentialPropertySerializer(serializers.ModelSerializer):
+    category = serializers.CharField()  
+    amenities = serializers.PrimaryKeyRelatedField(many=True, queryset=Amenity.objects.all())
+    seller = serializers.PrimaryKeyRelatedField(read_only=True)
+
+    class Meta:
+        model = ResidentialProperty
+        fields = ['id', 'seller', 'category', 'property_type', 'price', 'location', 'num_rooms', 'num_bathrooms', 'size', 'amenities', 'description', 'land_area', 'images', 'video']
+
+    def validate_category(self, value):
+        if not PropertyCategory.objects.filter(name=value).exists():
+            raise serializers.ValidationError('Category does not exist.')
+        return value
 
 class OTPSerializer(serializers.Serializer):
     email = serializers.EmailField()
