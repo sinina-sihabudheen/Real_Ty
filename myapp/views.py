@@ -10,7 +10,7 @@ from django.core.mail import send_mail
 from .models import User,Seller, LandProperty, ResidentialProperty, EmailDevice, Region, Buyer, Amenity, PropertyCategory
 from .serializers import SellerSerializer, RegionSerializer, UpdateUserRoleSerializer, LandPropertySerializer, ResidentialPropertySerializer, RegisterSerializer, AmenitySerializer
 from .serializers import OTPVerificationSerializer, ResendOTPSerializer, PasswordChangeSerializer, ForgotPasswordSerializer, ResetPasswordSerializer, BuyerSerializer
-from .serializers import RegisterResidentialPropertySerializer, RegisterLandPropertySerializer
+from .serializers import RegisterResidentialPropertySerializer, RegisterLandPropertySerializer,PropertyImageSerializer
 from rest_framework.views import APIView
 from django.core.exceptions import ObjectDoesNotExist
 from django.contrib.auth import authenticate
@@ -295,38 +295,33 @@ class UserDetailView(generics.RetrieveAPIView):
 
     def get_object(self):
         return self.request.user
-    
+
+
 class RegisterLandsViewSet(viewsets.ModelViewSet):
     queryset = LandProperty.objects.all()
     serializer_class = RegisterLandPropertySerializer
     permission_classes = [IsAuthenticated]
-    images = serializers.ListField(child=serializers.ImageField(), required=True)
-    video = serializers.FileField(required=False)
-
 
     def perform_create(self, serializer):
         category_name = self.request.data.get('category')
         seller = self.request.user
-        
+
         try:
             seller = Seller.objects.get(user=seller)
         except Seller.DoesNotExist:
             raise serializers.ValidationError({'seller': 'Seller instance does not exist for the current user.'})
-        
+
         try:
-            category = PropertyCategory.objects.get(name=category_name)            
+            category = PropertyCategory.objects.get(name=category_name)
         except PropertyCategory.DoesNotExist:
             raise serializers.ValidationError({'category': 'Category does not exist.'})
-        
+
         serializer.save(category=category, seller=seller)
 
 class RegisterResidentialsViewSet(viewsets.ModelViewSet):
     queryset = ResidentialProperty.objects.all()
     serializer_class = RegisterResidentialPropertySerializer
     permission_classes = [IsAuthenticated]
-    images = serializers.ListField(child=serializers.ImageField(), required=True)
-    video = serializers.FileField(required=False)
-
 
     def perform_create(self, serializer):
         category_name = self.request.data.get('category')
@@ -334,37 +329,18 @@ class RegisterResidentialsViewSet(viewsets.ModelViewSet):
 
         try:
             seller = Seller.objects.get(user=seller)
-
         except Seller.DoesNotExist:
             raise serializers.ValidationError({'seller': 'Seller instance does not exist for the current user.'})
-        
+
         if not category_name:
             raise serializers.ValidationError({'category': 'Category is required.'})
 
         try:
             category = PropertyCategory.objects.get(name=category_name)
-
         except PropertyCategory.DoesNotExist:
             raise serializers.ValidationError({'category': 'Category does not exist.'})
 
         serializer.save(category=category, seller=seller)
-
-# class SellerLandsViewSet(viewsets.ModelViewSet):
-#     serializer_class = LandPropertySerializer
-#     permission_classes = [IsAuthenticated]
-
-#     def get_queryset(self):
-#         user = self.request.user
-#         return LandProperty.objects.filter(seller=user)
-    
-# class SellerResidentsViewSet(viewsets.ModelViewSet):
-#     serializer_class = ResidentialPropertySerializer
-#     permission_classes = [IsAuthenticated]
-
-#     def get_queryset(self):
-#         user = self.request.user
-#         return ResidentialProperty.objects.filter(seller=user)
-
 
 class SellerLandsViewSet(viewsets.ModelViewSet):
     serializer_class = LandPropertySerializer
@@ -389,10 +365,8 @@ class SellerResidentsViewSet(viewsets.ModelViewSet):
         try:
             seller = Seller.objects.get(user=user)
         except Seller.DoesNotExist:
-            return ResidentialProperty.objects.none()  # Return an empty queryset
+            return ResidentialProperty.objects.none()  
         return ResidentialProperty.objects.filter(seller=seller)
-
-
 
 class LandPropertyDetailView(generics.RetrieveUpdateDestroyAPIView):
     queryset = LandProperty.objects.all()

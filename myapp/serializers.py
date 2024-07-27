@@ -1,7 +1,7 @@
 from rest_framework import serializers
 from django.contrib.auth import get_user_model
 from django.core.validators import RegexValidator
-from .models import Seller, LandProperty, ResidentialProperty, EmailDevice, Region, Buyer, Amenity, PropertyCategory
+from .models import Seller, LandProperty, ResidentialProperty, EmailDevice, Region, Buyer, Amenity, PropertyCategory, PropertyImage
 from django.contrib.auth.password_validation import validate_password
 
 
@@ -173,42 +173,85 @@ class BuyerSerializer(serializers.ModelSerializer):
         model = Buyer
         fields = ['id', 'user']
 
+class PropertyImageSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = PropertyImage
+        # fields = ['id', 'image']
+        fields = ['image', 'land_property', 'residential_property']
+
+
 class RegisterLandPropertySerializer(serializers.ModelSerializer):
+    images = PropertyImageSerializer(many=True, read_only=True)
+    new_images = serializers.ListField(
+        child=serializers.ImageField(), write_only=True, required=False
+    )
+
     amenities = serializers.PrimaryKeyRelatedField(queryset=Amenity.objects.all(), many=True)
     category = serializers.CharField()  
     seller = serializers.PrimaryKeyRelatedField(read_only=True)
 
     class Meta:
         model = LandProperty
-        fields = ['price', 'description', 'area', 'amenities', 'location', 'images', 'video', 'category', 'seller']
+        fields = ['price', 'description', 'area', 'amenities', 'location', 'video', 'category', 'seller','images','new_images']
         
     def validate_category(self, value):
         if value and not PropertyCategory.objects.filter(name=value).exists():
             raise serializers.ValidationError('Category does not exist.')
         return value
+    
+    def create(self, validated_data):
+        new_images = validated_data.pop('new_images', [])    
+        if new_images:
+            print("IMAGES ADDED")
+        else:
+            print("IMAGES NOT ADDED")
+
+        print(f"Validated data: {validated_data}")
+
+        land_property = super().create(validated_data)
+        for image in new_images:
+            print(f"Creating PropertyImage with land_property={land_property} and image={image}")
+
+            PropertyImage.objects.create(land_property=land_property, image=image)
+        return land_property
 
 class RegisterResidentialPropertySerializer(serializers.ModelSerializer):
+    images = PropertyImageSerializer(many=True, read_only=True)
+    new_images = serializers.ListField(
+        child=serializers.ImageField(), write_only=True, required=False
+    )
+
     category = serializers.CharField()  
     amenities = serializers.PrimaryKeyRelatedField(queryset=Amenity.objects.all(),many=True)
     seller = serializers.PrimaryKeyRelatedField(read_only=True)
 
     class Meta:
         model = ResidentialProperty
-        fields = ['seller', 'category', 'property_type', 'price', 'location', 'num_rooms', 'num_bathrooms', 'size', 'amenities', 'description', 'land_area', 'images', 'video']
+        fields = ['seller', 'category', 'property_type', 'price', 'location', 'num_rooms', 'num_bathrooms', 'size', 'amenities', 'description', 'land_area', 'video','images','new_images']
 
     def validate_category(self, value):
         if not PropertyCategory.objects.filter(name=value).exists():
             raise serializers.ValidationError('Category does not exist.')
         return value
     
+    def create(self, validated_data):
+        new_images = validated_data.pop('new_images', [])
+        residential_property = super().create(validated_data)
+        for image in new_images:
+            PropertyImage.objects.create(residential_property=residential_property, image=image)
+        return residential_property
+    
 class LandPropertySerializer(serializers.ModelSerializer):
+    images = PropertyImageSerializer(many=True, read_only=True)
+    # images = serializers.PrimaryKeyRelatedField(many=True, read_only=True)
+
     amenities = serializers.PrimaryKeyRelatedField(queryset=Amenity.objects.all(), many=True)
     category = serializers.CharField()  
     seller = serializers.PrimaryKeyRelatedField(read_only=True)
 
     class Meta:
         model = LandProperty
-        fields = ['id', 'price', 'description', 'area', 'amenities', 'location', 'images', 'video', 'category', 'seller']
+        fields = ['id', 'price', 'description', 'area', 'amenities', 'location', 'video', 'category', 'seller','images']
         
     def validate_category(self, value):
         if value and not PropertyCategory.objects.filter(name=value).exists():
@@ -216,13 +259,19 @@ class LandPropertySerializer(serializers.ModelSerializer):
         return value
 
 class ResidentialPropertySerializer(serializers.ModelSerializer):
+    images = PropertyImageSerializer(many=True, read_only=True)
+    # images = serializers.PrimaryKeyRelatedField(many=True, read_only=True)
+
+
     category = serializers.CharField()  
     amenities = serializers.PrimaryKeyRelatedField(many=True, queryset=Amenity.objects.all())
     seller = serializers.PrimaryKeyRelatedField(read_only=True)
 
     class Meta:
         model = ResidentialProperty
-        fields = ['id', 'seller', 'category', 'property_type', 'price', 'location', 'num_rooms', 'num_bathrooms', 'size', 'amenities', 'description', 'land_area', 'images', 'video']
+        fields = ['id', 'seller', 'category', 'property_type', 'price',
+                 'location', 'num_rooms', 'num_bathrooms', 'size', 'amenities',
+                 'description', 'land_area', 'video','images']
 
     def validate_category(self, value):
         if not PropertyCategory.objects.filter(name=value).exists():

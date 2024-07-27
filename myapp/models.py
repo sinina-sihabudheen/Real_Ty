@@ -99,7 +99,7 @@ class LandProperty(models.Model):
     area = models.DecimalField(max_digits=10, decimal_places=2, help_text='Area in cent or acre')
     price = models.DecimalField(max_digits=10, decimal_places=2, help_text='Price in lakhs')
     location = models.CharField(max_length=255)
-    images = models.ImageField(upload_to='property_images/', blank=True, null=True)
+    # images = models.ImageField(upload_to='property_images/', blank=True, null=True)
     video = models.FileField(upload_to='property_videos/', blank=True, null=True)
     description = models.TextField(blank=True, null=True)
     amenities = models.ManyToManyField(Amenity)
@@ -122,11 +122,19 @@ class ResidentialProperty(models.Model):
     amenities = models.ManyToManyField(Amenity)
     description = models.TextField(blank=True, null=True)
     land_area = models.DecimalField(max_digits=10, decimal_places=2, blank=True, null=True, help_text='Land area in cents (only for villas)')
-    images = models.ImageField(upload_to='property_images/', blank=True, null=True)
+    # images = models.ImageField(upload_to='property_images/', blank=True, null=True)
     video = models.FileField(upload_to='property_videos/', blank=True, null=True)
     
     def __str__(self):
         return f"{self.property_type}: {self.location}"
+    
+class PropertyImage(models.Model):
+    image = models.ImageField(upload_to='property_images/')
+    land_property  = models.ForeignKey(LandProperty, on_delete=models.CASCADE, related_name='images', null=True, blank=True)
+    residential_property = models.ForeignKey(ResidentialProperty, on_delete=models.CASCADE, related_name='images', null=True, blank=True)
+
+    def __str__(self) -> str:
+        return f"Image for {self.land_property or self.residential_property}"
     
 class Subscription(models.Model):
     seller = models.ForeignKey(Seller, on_delete=models.CASCADE)

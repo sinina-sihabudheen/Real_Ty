@@ -3,7 +3,7 @@ from django.contrib import admin
 # Register your models here
 from .models import (
     User, Seller, Buyer, Region, EmailDevice, Amenity, PropertyCategory,
-    LandProperty, ResidentialProperty, Subscription, SubscriptionPayment
+    LandProperty, ResidentialProperty, Subscription, SubscriptionPayment, PropertyImage
 )
 
 @admin.register(User)
@@ -40,10 +40,15 @@ class PropertyCategoryAdmin(admin.ModelAdmin):
 
 @admin.register(LandProperty)
 class LandPropertyAdmin(admin.ModelAdmin):
-    list_display = ['id', 'seller', 'category', 'price', 'area', 'location', 'images', 'video', 'description']
+    list_display = ['id', 'seller', 'category', 'price', 'area', 'location', 'video', 'description']
     search_fields = ['location']
 
 @admin.register(ResidentialProperty)
 class ResidentialPropertyAdmin(admin.ModelAdmin):
-    list_display = ['id', 'seller', 'category', 'property_type', 'price', 'location', 'num_rooms', 'num_bathrooms', 'size', 'images', 'video', 'description', 'land_area']
+    list_display = ['id', 'seller', 'category', 'property_type', 'price', 'location', 'num_rooms', 'num_bathrooms', 'size', 'video', 'description', 'land_area']
     search_fields = ['location']
+
+@admin.register(PropertyImage)
+class PropertyImageAdmin(admin.ModelAdmin):
+    list_display = ['id' ,'image']
+  
