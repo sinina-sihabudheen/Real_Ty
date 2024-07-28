@@ -367,6 +367,17 @@ class SellerResidentsViewSet(viewsets.ModelViewSet):
         except Seller.DoesNotExist:
             return ResidentialProperty.objects.none()  
         return ResidentialProperty.objects.filter(seller=seller)
+    
+class LandsListViewSet(viewsets.ModelViewSet):
+    serializer_class = LandPropertySerializer
+    permission_classes = [IsAuthenticated]
+    queryset = LandProperty.objects.all()
+
+
+class ResidentsListViewSet(viewsets.ModelViewSet):
+    serializer_class = ResidentialPropertySerializer
+    permission_classes = [IsAuthenticated]
+    queryset = ResidentialProperty.objects.all()
 
 class LandPropertyDetailView(generics.RetrieveUpdateDestroyAPIView):
     queryset = LandProperty.objects.all()

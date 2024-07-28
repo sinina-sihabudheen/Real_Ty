@@ -247,7 +247,9 @@ class LandPropertySerializer(serializers.ModelSerializer):
 
     amenities = serializers.PrimaryKeyRelatedField(queryset=Amenity.objects.all(), many=True)
     category = serializers.CharField()  
-    seller = serializers.PrimaryKeyRelatedField(read_only=True)
+    # seller = serializers.PrimaryKeyRelatedField(read_only=True)
+    seller = SellerSerializer(read_only=True)
+
 
     class Meta:
         model = LandProperty
@@ -265,7 +267,9 @@ class ResidentialPropertySerializer(serializers.ModelSerializer):
 
     category = serializers.CharField()  
     amenities = serializers.PrimaryKeyRelatedField(many=True, queryset=Amenity.objects.all())
-    seller = serializers.PrimaryKeyRelatedField(read_only=True)
+    # seller = serializers.PrimaryKeyRelatedField(read_only=True)
+    seller = SellerSerializer(read_only=True)
+
 
     class Meta:
         model = ResidentialProperty

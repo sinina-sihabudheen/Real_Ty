@@ -7,7 +7,7 @@ from .views import (
     UserListAPIView, UserBlockAPIView, SellerListAPIView, SellerBlockAPIView, BuyerListAPIView, BuyerBlockAPIView,
     RegisterLandsViewSet, RegisterResidentialsViewSet, AmenityViewSet,
     RegionCreateAPIView, RegionDeleteAPIView, SellerResidentsViewSet, SellerLandsViewSet,LandPropertyDetailView,
-    ResidentialPropertyDetailView
+    ResidentialPropertyDetailView, LandsListViewSet, ResidentsListViewSet
 )
 
 router = DefaultRouter()
@@ -17,6 +17,8 @@ router.register(r'register-lands', RegisterLandsViewSet)
 router.register(r'register-residentials', RegisterResidentialsViewSet)
 router.register(r'seller-lands', SellerLandsViewSet, basename='seller-lands')
 router.register(r'seller-residents', SellerResidentsViewSet, basename='seller-residents')
+router.register(r'landslist', LandsListViewSet, basename='landslist')
+router.register(r'residentslist', ResidentsListViewSet, basename='residentslist')
 
 urlpatterns = [
     path('', include(router.urls)),
@@ -51,4 +53,6 @@ urlpatterns = [
 
     path('lands/<int:pk>/', LandPropertyDetailView.as_view(), name='land-detail'),
     path('residentials/<int:pk>/', ResidentialPropertyDetailView.as_view(), name='residential-detail'),
+
+
 ]
