@@ -72,6 +72,7 @@ INSTALLED_APPS = [
 
 #For OTP  
     'myapp',
+    'subscriptions',
     'django_otp',
     'django_otp.plugins.otp_email',
 ]
@@ -286,6 +287,11 @@ STATIC_URL = '/static/'
 STATIC_ROOT = os.path.join(BASE_DIR, 'static')
 
 # MEDIA_ROOT = BASE_DIR / 'media'
+
+
+
+STRIPE_SECRET_KEY = config('STRIPE_SECRET_KEY')
+
 
 
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
