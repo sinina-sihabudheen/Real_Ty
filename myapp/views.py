@@ -4,10 +4,11 @@ from rest_framework.decorators import action
 from django.contrib.auth import get_user_model, update_session_auth_hash
 from django.contrib.auth.password_validation import validate_password
 from rest_framework import viewsets
-
+from rest_framework.exceptions import ValidationError
+from django.utils import timezone
 from rest_framework_simplejwt.tokens import RefreshToken
 from django.core.mail import send_mail
-from .models import User,Seller, LandProperty, ResidentialProperty, EmailDevice, Region, Buyer, Amenity, PropertyCategory
+from .models import User,Seller, LandProperty, ResidentialProperty, EmailDevice, Region, Buyer, Amenity, PropertyCategory, Subscription
 from .serializers import SellerSerializer, RegionSerializer, UpdateUserRoleSerializer, LandPropertySerializer, ResidentialPropertySerializer, RegisterSerializer, AmenitySerializer
 from .serializers import OTPVerificationSerializer, ResendOTPSerializer, PasswordChangeSerializer, ForgotPasswordSerializer, ResetPasswordSerializer, BuyerSerializer
 from .serializers import RegisterResidentialPropertySerializer, RegisterLandPropertySerializer,PropertyImageSerializer
@@ -45,7 +46,7 @@ class GoogleLoginView(APIView):
         print("ENTERED INTO GOOGLE")
         token = request.data.get('token')
         if not token:
-            return Response({'error': 'No token provided'}, status=status.HTTP_400_BAD_REQUEST)
+            return Response({'message': 'No token provided'}, status=status.HTTP_400_BAD_REQUEST)
         try:
             print(token)
 
@@ -54,7 +55,7 @@ class GoogleLoginView(APIView):
             if payload['iss'] not in ['accounts.google.com', 'https://accounts.google.com']:
                 raise ValueError('Wrong issuer.')
         except ValueError:
-            return Response({'error': 'Invalid token'}, status=status.HTTP_400_BAD_REQUEST)
+            return Response({'message': 'Invalid token'}, status=status.HTTP_400_BAD_REQUEST)
 
         email = payload['email']
         name = payload.get('name', '')
@@ -71,7 +72,7 @@ class GoogleLoginView(APIView):
         elif user.is_seller :
             role = ['seller']
         else:
-            return Response({'error': 'Invalid role'}, status=status.HTTP_401_UNAUTHORIZED)
+            return Response({'message': 'Invalid role'}, status=status.HTTP_401_UNAUTHORIZED)
 
         refresh = RefreshToken.for_user(user)
         return Response({
@@ -86,16 +87,23 @@ class AdminLoginView(APIView):
     def post(self, request, *args, **kwargs):
         email = request.data.get('email')
         password = request.data.get('password')
-
+        
         if email is None or password is None:
-            return Response({'error': 'Please provide both email and password'}, status=status.HTTP_400_BAD_REQUEST)
+            
+            return Response(
+                {'message': 'Please provide both email and password'},
+                  status=status.HTTP_400_BAD_REQUEST)
 
         try:
             user = User.objects.get(email=email)
             if not user.check_password(password) or not user.is_staff:
-                return Response({'error': 'Invalid credentials'}, status=status.HTTP_401_UNAUTHORIZED)
+                return Response(
+                    {'message': 'Invalid email or password'}, 
+                    status=status.HTTP_401_UNAUTHORIZED)
         except User.DoesNotExist:
-            return Response({'error': 'Invalid credentials'}, status=status.HTTP_401_UNAUTHORIZED)
+            return Response(
+                {'message': 'User is not exist.'}, 
+                status=status.HTTP_401_UNAUTHORIZED)
 
         refresh = RefreshToken.for_user(user)
 
@@ -110,27 +118,31 @@ class CustomLoginView(APIView):
     permission_classes = []
 
     def post(self, request, *args, **kwargs):
+
+        print(f"Request data: {request.data}")
         email = request.data.get('email')
         password = request.data.get('password')
+        print(f"Email: {email}, Password: {password}")
 
-        if email is None or password is None:
-            return Response({'error': 'Please provide both email and password'}, status=status.HTTP_400_BAD_REQUEST)
+    
+        if not email or not password:
+            print("WWWW")
+            return Response({'message': 'Please provide both email and password'}, status=status.HTTP_400_BAD_REQUEST)
 
         print(f"Attempting to authenticate with email: {email}, {password}")
-        
-        
-        try:
-            user = User.objects.get(email=email)
 
-            if user.is_admin:
-                return Response({'error': 'Admin cannot access the user side.'}, status=status.HTTP_401_UNAUTHORIZED)
-            if not user.check_password(password):
-                return Response({'error': 'Invalid credentials'}, status=status.HTTP_401_UNAUTHORIZED)
-            
-        except User.DoesNotExist:
+        user = authenticate(request, username=email, password=password)
+        print(f"Authenticated user: {user}")
 
-            print(f"Failed login attempt with email: {email}")
-            return Response({'error': 'Invalid credentials'}, status=status.HTTP_401_UNAUTHORIZED)
+        
+        if user is None:
+            print("Invalid email or password")
+            return Response({'message': 'Invalid email or password',"error":True}, status=status.HTTP_400_BAD_REQUEST)
+        
+        if user.is_admin:
+            return Response({'message': 'Admin cannot access the user side.'}, status=status.HTTP_400_BAD_REQUEST)
+        
+
 
         refresh = RefreshToken.for_user(user)
 
@@ -141,7 +153,7 @@ class CustomLoginView(APIView):
         elif user.is_seller :
             role = ['seller']
         else:
-            return Response({'error': 'Invalid role'}, status=status.HTTP_401_UNAUTHORIZED)
+            return Response({'message': 'User role is not assigned properly.'}, status=status.HTTP_401_UNAUTHORIZED)
 
         return Response({
             'refresh': str(refresh),
@@ -155,69 +167,74 @@ class RegionViewSet(viewsets.ReadOnlyModelViewSet):
     serializer_class = RegionSerializer 
 
 
+
 class UserRegistrationView(generics.CreateAPIView):
     serializer_class = RegisterSerializer
     permission_classes = [AllowAny]
 
     def post(self, request, *args, **kwargs):
         serializer = self.get_serializer(data=request.data)
-        serializer.is_valid(raise_exception=True)
+
+        try:
+            serializer.is_valid(raise_exception=True)
+        except ValidationError as e:
+            return Response({'errors': serializer.errors}, status=status.HTTP_400_BAD_REQUEST)
 
         email = serializer.validated_data['email']
         password = serializer.validated_data['password']
         is_seller = serializer.validated_data.get('is_seller')
-        ##
         is_buyer = not is_seller 
         username = serializer.validated_data['username']
         address = serializer.validated_data['address']
-        contact_number= serializer.validated_data['contact_number']
+        contact_number = serializer.validated_data['contact_number']
 
+        # Check for email existence only
+        if User.objects.filter(email=email).exists():
+            return Response({'message': 'Email already registered'}, status=status.HTTP_400_BAD_REQUEST)
 
         try:
-            user = User.objects.get(email=email)
-            return Response({'detail': 'Email already registered'}, status=status.HTTP_400_BAD_REQUEST)
-        except User.DoesNotExist:
-            pass
-
-        user = User.objects.create_user(
-            username=username,
-            email=email,
-            password=password,
-            address=address,
-            contact_number=contact_number,
-            is_seller=is_seller,
-            is_buyer=is_buyer
-        )
-        if is_seller:
-            
-            seller_profile = Seller.objects.create(
-                user=user, 
-                agency_name=serializer.validated_data['agency_name']
+            user = User.objects.create_user(
+                username=username,
+                email=email,
+                password=password,
+                address=address,
+                contact_number=contact_number,
+                is_seller=is_seller,
+                is_buyer=is_buyer
             )
-            seller_profile.regions.set(serializer.validated_data['regions'])
-        else:
-            Buyer.objects.create(user=user)
+            if is_seller:
+                seller_profile = Seller.objects.create(
+                    user=user, 
+                    agency_name=serializer.validated_data['agency_name']
+                )
+                seller_profile.regions.set(serializer.validated_data['regions'])
+            else:
+                Buyer.objects.create(user=user)
+        except Exception as e:
+            return Response({'message': 'Error creating user'}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+    
+        try:
+            device = EmailDevice.objects.create(user=user, email=email)
+            device.generate_challenge()
+            print(device.token)
 
+            send_mail(
+                'Your OTP Code',
+                f'Your OTP code is {device.token}',
+                settings.EMAIL_HOST_USER,
+                [email],
+                fail_silently=False,
+            )
 
-        device = EmailDevice.objects.create(user=user, email=email)
-        device.generate_challenge()
-        print(device.token)
+            print("OTP sent to email to:")
+            print(email)
 
-        send_mail(
-            'Your OTP Code',
-            f'Your OTP code is {device.token}',
-            settings.EMAIL_HOST_USER,
-            [email],
-            fail_silently=False,
-        )
-
-        print("OTP sent to email to:")
-        print(email)
-
-        return Response({
-            'detail': 'OTP sent successfully',
-            'email': email,
-        }, status=status.HTTP_200_OK)
+            return Response({
+                'message': 'An OTP sent to your email successfully',
+                'email': email,
+            }, status=status.HTTP_200_OK)
+        except Exception as e:
+            return Response({'message': 'Error sending OTP email'}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
     
 class OTPVerificationView(generics.GenericAPIView):
     serializer_class = OTPVerificationSerializer
@@ -264,7 +281,7 @@ class ResendOTPView(generics.GenericAPIView):
         try:
             user = User.objects.get(email=email)
         except User.DoesNotExist:
-            return Response({'detail': 'User not found'}, status=status.HTTP_404_NOT_FOUND)
+            return Response({'message': 'User is not found'}, status=status.HTTP_404_NOT_FOUND)
 
      
         EmailDevice.objects.filter(user=user, is_active=True).update(is_active=False)
@@ -296,6 +313,10 @@ class UserDetailView(generics.RetrieveAPIView):
     def get_object(self):
         return self.request.user
 
+class SellerDetailView(generics.RetrieveAPIView):
+    queryset = Seller.objects.all()
+    serializer_class = SellerSerializer
+    lookup_field = 'id'  
 
 class RegisterLandsViewSet(viewsets.ModelViewSet):
     queryset = LandProperty.objects.all()
@@ -310,6 +331,16 @@ class RegisterLandsViewSet(viewsets.ModelViewSet):
             seller = Seller.objects.get(user=seller)
         except Seller.DoesNotExist:
             raise serializers.ValidationError({'seller': 'Seller instance does not exist for the current user.'})
+        
+        # Check subscription status
+        subscription = Subscription.objects.filter(seller=seller).first()
+        if not subscription or (subscription.ended_at and timezone.now().date() > subscription.ended_at):
+            raise ValidationError({'subscription': 'Subscription has expired or does not exist.'})
+
+        if subscription.subscription_type == 'free':
+            property_count = LandProperty.objects.filter(seller=seller).count() + ResidentialProperty.objects.filter(seller=seller).count()
+            if property_count >= 5:
+                raise ValidationError({'subscription': 'You have reached the limit of 5 properties for a free subscription. Please upgrade to premium.'})
 
         try:
             category = PropertyCategory.objects.get(name=category_name)
@@ -317,6 +348,7 @@ class RegisterLandsViewSet(viewsets.ModelViewSet):
             raise serializers.ValidationError({'category': 'Category does not exist.'})
 
         serializer.save(category=category, seller=seller)
+
 
 class RegisterResidentialsViewSet(viewsets.ModelViewSet):
     queryset = ResidentialProperty.objects.all()
@@ -331,6 +363,17 @@ class RegisterResidentialsViewSet(viewsets.ModelViewSet):
             seller = Seller.objects.get(user=seller)
         except Seller.DoesNotExist:
             raise serializers.ValidationError({'seller': 'Seller instance does not exist for the current user.'})
+        
+         # Check subscription status
+        subscription = Subscription.objects.filter(seller=seller).first()
+        if not subscription or (subscription.ended_at and timezone.now().date() > subscription.ended_at):
+            raise ValidationError({'subscription': 'Subscription has expired or does not exist.'})
+
+        if subscription.subscription_type == 'free':
+            property_count = LandProperty.objects.filter(seller=seller).count() + ResidentialProperty.objects.filter(seller=seller).count()
+            if property_count >= 5:
+                raise ValidationError({'subscription': 'You have reached the limit of 5 properties for a free subscription. Please upgrade to premium.'})
+
 
         if not category_name:
             raise serializers.ValidationError({'category': 'Category is required.'})
@@ -351,8 +394,7 @@ class SellerLandsViewSet(viewsets.ModelViewSet):
         try:
             seller = Seller.objects.get(user=user)
         except Seller.DoesNotExist:
-            # Handle the case where the Seller instance does not exist
-            return LandProperty.objects.none()  # Return an empty queryset
+            return LandProperty.objects.none() 
         return LandProperty.objects.filter(seller=seller)
 
 
@@ -427,7 +469,7 @@ class ChangePasswordView(generics.UpdateAPIView):
             user.set_password(serializer.data.get("new_password"))
             user.save()
             update_session_auth_hash(request, user)
-            return Response({"detail": "Password updated successfully"}, status=status.HTTP_200_OK)
+            return Response({"message": "Password updated successfully"}, status=status.HTTP_200_OK)
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
 class UpdateUserRole(generics.UpdateAPIView):
@@ -459,7 +501,7 @@ class ForgotPasswordView(generics.GenericAPIView):
         try:
             user = User.objects.get(email=email)
         except User.DoesNotExist:
-            return Response({'error': 'User not found.'}, status=status.HTTP_404_NOT_FOUND)
+            return Response({'message': 'User not found.'}, status=status.HTTP_404_NOT_FOUND)
 
         device = EmailDevice.objects.create(user=user, email=email)
         device.generate_challenge()
@@ -476,7 +518,7 @@ class ForgotPasswordView(generics.GenericAPIView):
         print("password reset OTP sent to email to:", email)
 
         return Response({
-            'detail': 'OTP sent successfully',
+            'message': 'OTP sent successfully',
             'email': email,
         }, status=status.HTTP_200_OK)
   
@@ -493,18 +535,18 @@ class ResetPasswordView(generics.GenericAPIView):
         confirm_password = serializer.validated_data['confirm_password']
 
         if password != confirm_password:
-            return Response({'error': 'Passwords do not match.'}, status=status.HTTP_400_BAD_REQUEST)
+            return Response({'message': 'Passwords do not match.'}, status=status.HTTP_400_BAD_REQUEST)
 
         try:
             device = EmailDevice.objects.get(email=email, token=otp)
         except EmailDevice.DoesNotExist:
-            return Response({'error': 'Invalid OTP.'}, status=status.HTTP_400_BAD_REQUEST)
+            return Response({'message': 'Invalid OTP.'}, status=status.HTTP_400_BAD_REQUEST)
 
         user = User.objects.get(email=email)
         user.set_password(password)
         user.save()
 
-        return Response({'detail': 'Password reset successfully'}, status=status.HTTP_200_OK)
+        return Response({'message': 'Password reset successfully'}, status=status.HTTP_200_OK)
 
 ##Admin side lists
 
@@ -524,7 +566,7 @@ class UserBlockAPIView(APIView):
         serializer = UserSerializer(user)
         return Response(serializer.data, status=status.HTTP_200_OK)
      
-   # List sellers
+# List sellers
 class SellerListAPIView(generics.ListAPIView):
     queryset = Seller.objects.all()
     serializer_class = SellerSerializer
@@ -561,11 +603,12 @@ class RegionCreateAPIView(APIView):
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
 class RegionDeleteAPIView(APIView):
+    
     def delete(self, request, pk):
         try:
             region = Region.objects.get(pk=pk)
         except Region.DoesNotExist:
-            return Response({'error': 'Region not found'}, status=status.HTTP_404_NOT_FOUND)
+            return Response({'message': 'Region not found'}, status=status.HTTP_404_NOT_FOUND)
 
         region.delete()
-        return Response(status=status.HTTP_204_NO_CONTENT)
+        return Response({'message': 'No content'},status=status.HTTP_204_NO_CONTENT)

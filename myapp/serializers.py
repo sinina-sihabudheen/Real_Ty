@@ -22,7 +22,7 @@ class UserSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = User
-        fields = ['id', 'username', 'email', 'address', 'contact_number', 'profile_image', 'is_seller', 'is_buyer', 'date_of_birth']
+        fields = ['id', 'username', 'email', 'address', 'contact_number', 'profile_image', 'is_seller', 'is_buyer', 'date_of_birth','social_provider']
 
     def update(self, instance, validated_data):
         profile_image = validated_data.pop('profile_image', None)
@@ -53,32 +53,25 @@ class RegisterSerializer(serializers.ModelSerializer):
                     )
                 ]
             }
-            # 'username': {
-            #     'validators': [
-            #         RegexValidator(
-            #             regex=r'^[a-zA-Z]*$', 
-            #             message='Username should only contain letters'
-            #         )
-            #     ]
-            # }
         }
+
     def validate_password(self, value):
-            if len(value) < 8:
-                raise serializers.ValidationError("Password must be at least 8 characters long.")
-            if not any(char.isdigit() for char in value):
-                raise serializers.ValidationError("Password must contain at least one digit.")
-            if not any(char.isalpha() for char in value):
-                raise serializers.ValidationError("Password must contain at least one letter.")
-            return value
+        if len(value) < 8:
+            raise serializers.ValidationError("Password must be at least 8 characters long.")
+        if not any(char.isdigit() for char in value):
+            raise serializers.ValidationError("Password must contain at least one digit.")
+        if not any(char.isalpha() for char in value):
+            raise serializers.ValidationError("Password must contain at least one letter.")
+        return value
 
     def validate_contact_number(self, value):
-            if not value.isdigit():
-                raise serializers.ValidationError("Contact number should only contain digits.")
-            if len(value) != 10:
-                raise serializers.ValidationError("Contact number should be 10 digits long.")
-            if value[0] not in '6789':
-                raise serializers.ValidationError("Contact number should start with 6, 7, 8, or 9.")
-            return value    
+        if not value.isdigit():
+            raise serializers.ValidationError("Contact number should only contain digits.")
+        if len(value) != 10:
+            raise serializers.ValidationError("Contact number should be 10 digits long.")
+        if value[0] not in '6789':
+            raise serializers.ValidationError("Contact number should start with 6, 7, 8, or 9.")
+        return value    
 
     def validate_email(self, value):
         if User.objects.filter(email=value).exists():
@@ -86,13 +79,15 @@ class RegisterSerializer(serializers.ModelSerializer):
         return value
 
     def validate(self, data):
+        errors = {}
         if data['password'] != data['confirm_password']:
-            raise serializers.ValidationError("Passwords do not match.")
+            errors['confirm_password'] = ["Passwords do not match."]
         if data.get('is_seller') and (not data.get('agency_name') or not data.get('regions')):
-            raise serializers.ValidationError("Agency name and regions are required for seller registration.")
+            errors['agency_name'] = ["Agency name and regions are required for seller registration."]
+        if errors:
+            raise serializers.ValidationError(errors)
         return data
 
-  
     def create(self, validated_data):
         validated_data.pop('confirm_password', None)
         token = validated_data.pop('token', None)
@@ -104,7 +99,6 @@ class RegisterSerializer(serializers.ModelSerializer):
         validated_data['is_buyer'] = is_buyer
         print(f"Creating user with is_seller={is_seller} and is_buyer={is_buyer}")
         
-       
         user = User.objects.create_user(
             username=validated_data['username'],
             email=validated_data['email'], 
@@ -115,26 +109,20 @@ class RegisterSerializer(serializers.ModelSerializer):
             is_buyer=is_buyer
         )
 
-       
         if is_seller:
-            
             seller_profile = Seller.objects.create(
                 user=user, 
                 agency_name=validated_data['agency_name'],
-                
             )
             seller_profile.regions.set(validated_data['regions'])
         else:
-            
-            Buyer.objects.create(
-                user=user,
-                
-            )
+            Buyer.objects.create(user=user)
 
         return {
             'validated_data': validated_data,
             'token': token
         }
+
 
 class ForgotPasswordSerializer(serializers.Serializer):
     email = serializers.EmailField()
@@ -146,8 +134,8 @@ class ResetPasswordSerializer(serializers.Serializer):
     confirm_password = serializers.CharField()
 
 class SellerSerializer(serializers.ModelSerializer):
-    user = UserSerializer()
-    regions = RegionSerializer(many=True)
+    user = UserSerializer(read_only=True)
+    regions = RegionSerializer(many=True,read_only=True)
 
     class Meta:
         model = Seller
@@ -176,7 +164,6 @@ class BuyerSerializer(serializers.ModelSerializer):
 class PropertyImageSerializer(serializers.ModelSerializer):
     class Meta:
         model = PropertyImage
-        # fields = ['id', 'image']
         fields = ['image', 'land_property', 'residential_property']
 
 
@@ -243,11 +230,11 @@ class RegisterResidentialPropertySerializer(serializers.ModelSerializer):
     
 class LandPropertySerializer(serializers.ModelSerializer):
     images = PropertyImageSerializer(many=True, read_only=True)
-    # images = serializers.PrimaryKeyRelatedField(many=True, read_only=True)
+    # amenities = AmenitySerializer(many=True, read_only=True)
+    amenities = serializers.StringRelatedField(many=True)
 
-    amenities = serializers.PrimaryKeyRelatedField(queryset=Amenity.objects.all(), many=True)
+    # amenities = serializers.PrimaryKeyRelatedField(queryset=Amenity.objects.all(), many=True)
     category = serializers.CharField()  
-    # seller = serializers.PrimaryKeyRelatedField(read_only=True)
     seller = SellerSerializer(read_only=True)
 
 
@@ -262,12 +249,11 @@ class LandPropertySerializer(serializers.ModelSerializer):
 
 class ResidentialPropertySerializer(serializers.ModelSerializer):
     images = PropertyImageSerializer(many=True, read_only=True)
-    # images = serializers.PrimaryKeyRelatedField(many=True, read_only=True)
-
+    # amenities = AmenitySerializer(many=True, read_only=True)
+    amenities = serializers.StringRelatedField(many=True)
 
     category = serializers.CharField()  
-    amenities = serializers.PrimaryKeyRelatedField(many=True, queryset=Amenity.objects.all())
-    # seller = serializers.PrimaryKeyRelatedField(read_only=True)
+    # amenities = serializers.PrimaryKeyRelatedField(many=True, queryset=Amenity.objects.all())
     seller = SellerSerializer(read_only=True)
 
 

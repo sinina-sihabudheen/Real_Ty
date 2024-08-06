@@ -152,6 +152,8 @@ class Subscription(models.Model):
     
     started_at = models.DateField(auto_now_add=True)
     ended_at = models.DateField(null=True, blank=True)
+    stripe_subscription_id = models.CharField(max_length=255, blank=True, null=True)
+
     
 class SubscriptionPayment(models.Model):
     subscription = models.ForeignKey(Subscription, on_delete=models.CASCADE)

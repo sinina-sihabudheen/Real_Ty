@@ -7,7 +7,7 @@ from .views import (
     UserListAPIView, UserBlockAPIView, SellerListAPIView, SellerBlockAPIView, BuyerListAPIView, BuyerBlockAPIView,
     RegisterLandsViewSet, RegisterResidentialsViewSet, AmenityViewSet,
     RegionCreateAPIView, RegionDeleteAPIView, SellerResidentsViewSet, SellerLandsViewSet,LandPropertyDetailView,
-    ResidentialPropertyDetailView, LandsListViewSet, ResidentsListViewSet
+    ResidentialPropertyDetailView, LandsListViewSet, ResidentsListViewSet,SellerDetailView
 )
 
 router = DefaultRouter()
@@ -31,6 +31,7 @@ urlpatterns = [
     path('verify-otp/', OTPVerificationView.as_view(), name='verify-otp'),
     path('resend-otp/', ResendOTPView.as_view(), name='resend-otp'),
     path('user/', UserDetailView.as_view(), name='user-detail'),
+    path('seller/<int:id>/',SellerDetailView.as_view(), name='seller-detail'),
 
     path('update-user/', UpdateUserView.as_view(), name='update-user'),
     path('change-password/', ChangePasswordView.as_view(), name='change-password'),

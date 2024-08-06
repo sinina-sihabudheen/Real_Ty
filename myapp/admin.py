@@ -18,13 +18,13 @@ class RegionAdmin(admin.ModelAdmin):
 
 @admin.register(Seller)
 class SellerAdmin(admin.ModelAdmin):
-    list_display = ['user', 'agency_name', 'subscription_status']
+    list_display = ['id', 'user_id', 'user', 'agency_name', 'subscription_status']
     list_filter = ['subscription_status']
     search_fields = ['user__username', 'agency_name']
 
 @admin.register(Buyer)
 class BuyerAdmin(admin.ModelAdmin):
-    list_display = ['user']
+    list_display = ['id','user']
 
 @admin.register(EmailDevice)
 class EamilDeviceAdmin(admin.ModelAdmin):
@@ -51,4 +51,13 @@ class ResidentialPropertyAdmin(admin.ModelAdmin):
 @admin.register(PropertyImage)
 class PropertyImageAdmin(admin.ModelAdmin):
     list_display = ['id' ,'image']
+
+@admin.register(Subscription)
+class SubscriptionAdmin(admin.ModelAdmin):
+    list_display = ['id', 'seller', 'subscription_type', 'started_at', 'ended_at', 'payment_plan']
+
+
+@admin.register(SubscriptionPayment)
+class SubscriptionPaymentAdmin(admin.ModelAdmin):
+    list_display = ['id', 'user', 'subscription', 'amount', 'payment_date', 'expiry_date', 'payment_status']
   
