@@ -6,8 +6,11 @@ from rest_framework.response import Response
 from rest_framework import status
 from myapp.models import Subscription, SubscriptionPayment, Seller, User, LandProperty, ResidentialProperty
 from django.shortcuts import get_object_or_404
-from rest_framework.permissions import IsAuthenticated
+from rest_framework.permissions import IsAuthenticated, AllowAny
 from django.views.decorators.csrf import csrf_exempt
+import json
+from django.http import JsonResponse, HttpResponse
+
 
 
 import logging
@@ -15,92 +18,43 @@ logger = logging.getLogger(__name__)
 
 
 stripe.api_key = settings.STRIPE_SECRET_KEY
+endpoint_secret = settings.STRIPE_WEBHOOK_SECRET_KEY
 
 # @permission_classes([IsAuthenticated])
-# @api_view(['POST'])
-# def create_subscription(request):
-#     user_id = request.data.get('user_id')
-#     print("USERID",user_id)
-
-#     seller = get_object_or_404(Seller, user_id=user_id)
-#     print("SELLER",seller)
-#     payment_method_id = request.data.get('payment_method_id')
-#     subscription_type = request.data.get('subscription_type')
-#     payment_plan = request.data.get('payment_plan')
-    
-#     try:
-        
-        
-#         customer = stripe.Customer.create(
-#             email=seller.user.email,
-#             payment_method=payment_method_id,
-#             invoice_settings={'default_payment_method': payment_method_id},
-#         )
-        
-#         price_id = 'price_1PiGUIGYaADgjXW8tSAwmjcb' 
-
-#         stripe_subscription = stripe.Subscription.create(
-#             customer=customer.id,
-#             items=[{'price': price_id}],
-#             expand=['latest_invoice.payment_intent'],
-#         )
-        
-#         if subscription_type == 'monthly':
-#             expiry_date = timezone.now() + timezone.timedelta(days=30)
-#         elif subscription_type == 'yearly':
-#             expiry_date = timezone.now() + timezone.timedelta(days=365)
-        
-#         subscription = Subscription.objects.create(
-#             seller=seller,
-#             subscription_type=subscription_type,
-#             payment_plan=payment_plan,
-#             ended_at=expiry_date,
-#             stripe_subscription_id=stripe_subscription.id,
-#         )
-        
-#         SubscriptionPayment.objects.create(
-#             subscription=subscription,
-#             user=seller,
-#             amount=stripe_subscription.latest_invoice.payment_intent.amount_received / 100,
-#             payment_date=timezone.now(),
-#             expiry_date=expiry_date,
-#             payment_status='paid',
-#             transaction_id=stripe_subscription.id,
-#         )
-        
-#         return Response(status=status.HTTP_200_OK, data={'subscription_id': stripe_subscription.id})
-#     except Exception as e:
-#         return Response(status=status.HTTP_400_BAD_REQUEST, data={'error': str(e)})
-
 @api_view(['POST'])
-@permission_classes([IsAuthenticated])
 def create_subscription(request):
     user_id = request.data.get('user_id')
+    print("USERID",user_id)
     subscription_type = request.data.get('subscription_type')
     payment_plan = request.data.get('payment_plan')
-    print("user",user_id)
-    
+
     seller = get_object_or_404(Seller, user_id=user_id)
-    print(seller)
-    
+
+    # Cancel and delete existing subscriptions
     existing_subscriptions = Subscription.objects.filter(seller=seller).order_by('-started_at')
     if existing_subscriptions.exists():
         for sub in existing_subscriptions:
-            stripe.Subscription.delete(sub.stripe_subscription_id)
+            if sub.stripe_subscription_id:
+                stripe.Subscription.delete(sub.stripe_subscription_id)
             sub.delete()
+
+    # Define Stripe price IDs for monthly and yearly plans
+    price_id = 'price_1PiGUIGYaADgjXW8tSAwmjcb' if subscription_type == 'monthly' else 'price_1PiHKhGYaADgjXW8hbcbDHEV'
+
+    
 
     try:
         checkout_session = stripe.checkout.Session.create(
             payment_method_types=['card'],
             line_items=[
                 {
-                    'price': 'price_1PiGUIGYaADgjXW8tSAwmjcb', 
+                    'price': price_id,
                     'quantity': 1,
                 },
             ],
             mode='subscription',
-            success_url='https://localhost:5173/',
-            cancel_url='https://localhost:5173/cancel',
+            success_url='http://localhost:5173/success?session_id={CHECKOUT_SESSION_ID}',
+            cancel_url='http://localhost:5173/cancel',
             metadata={
                 'user_id': user_id,
                 'subscription_type': subscription_type,
@@ -118,9 +72,10 @@ def cancel_subscription(request):
         user = request.user
         subscription = get_object_or_404(Subscription, seller__user=user, ended_at__isnull=True)
         
-        stripe.Subscription.delete(subscription.stripe_subscription_id)
+        if subscription.stripe_subscription_id:
+            stripe.Subscription.delete(subscription.stripe_subscription_id)
         
-        subscription.ended_at = timezone.now()
+        subscription.ended_at = timezone.now().date()
         subscription.save()
         
         return Response(status=status.HTTP_200_OK, data={'message': 'Subscription cancelled'})
@@ -129,15 +84,16 @@ def cancel_subscription(request):
     except Exception as e:
         return Response(status=status.HTTP_400_BAD_REQUEST, data={'error': str(e)})
 
-
 @api_view(['GET'])
 def check_subscription(request, user_id):
     try:
         user = get_object_or_404(User, id=user_id)
         seller = get_object_or_404(Seller, user=user)
+
+        print("SELLER:",seller)
         
         subscription = Subscription.objects.filter(seller=seller).order_by('-started_at').first()
-        
+        print("SUBSCRIPTION",subscription)
         if subscription:
             current_date = timezone.now().date()
             if subscription.ended_at:
@@ -164,64 +120,110 @@ def check_subscription(request, user_id):
     except Exception as e:
         logger.error(f"Error checking subscription for user_id {user_id}: {e}")
         return Response({'detail': 'Internal Server Error'}, status=500)
-
+    
+ 
 @csrf_exempt
-@api_view(['POST'])
 def stripe_webhook(request):
-    print("ENTERED INTO WEBHOOK")
     payload = request.body
-    print("webhook called+++++====")
-    print(payload)
-
-    sig_header = request.META.get('HTTP_STRIPE_SIGNATURE')
-    endpoint_secret = settings.STRIPE_WEBHOOK_SECRET_KEY
+    sig_header = request.META['HTTP_STRIPE_SIGNATURE']
+    event = None
 
     try:
         event = stripe.Webhook.construct_event(
             payload, sig_header, endpoint_secret
         )
-    except ValueError as e:
-        return Response({'error': 'Invalid payload'}, status=400)
-    except stripe.error.SignatureVerificationError as e:
-        return Response({'error': 'Invalid signature'}, status=400)
+    except ValueError:
+        # Invalid payload
+        return JsonResponse({'error': 'Invalid payload'}, status=400)
+    except stripe.error.SignatureVerificationError:
+        # Invalid signature
+        return JsonResponse({'error': 'Invalid signature'}, status=400)
 
-    if event['type'] == 'checkout.session.completed':
-        session = event['data']['object']
-        user_id = session['metadata']['user_id']
-        subscription_type = session['metadata']['subscription_type']
-        payment_plan = session['metadata']['payment_plan']
+    # Handle the event
+    event_type = event['type']
+    event_data = event['data']['object']
+    if event_type == 'payment_intent.succeeded':
+        print("PaymentIntent was successful!")
+    elif event_type == 'charge.succeeded':
+        print("Charge was successful!")
+    elif event_type == 'checkout.session.completed':
+            print("Checkout session completed!")
+          
+            session_id = event_data.get('id')
+            print("SESSIONIDs",session_id)
+            if session_id:
+                try:
+                    # Retrieve the Checkout Session to get metadata
+                    session = stripe.checkout.Session.retrieve(session_id)
+                    metadata = session.get('metadata', {})
 
-        seller = get_object_or_404(Seller, id=user_id)
-        stripe_subscription_id = session['subscription']
-        expiry_date = timezone.now() + timezone.timedelta(days=30) if subscription_type == 'monthly' else timezone.now() + timezone.timedelta(days=365)
-        
-        subscription = Subscription.objects.create(
-            seller=seller,
-            subscription_type=subscription_type,
-            payment_plan=payment_plan,
-            ended_at=expiry_date,
-            stripe_subscription_id=stripe_subscription_id,
-        )
-        
-        SubscriptionPayment.objects.create(
-            subscription=subscription,
-            user=seller,
-            amount=session['amount_total'] / 100,
-            payment_date=timezone.now(),
-            expiry_date=expiry_date,
-            payment_status='paid',
-            transaction_id=session['id'],
-        )
+                    user_id = metadata.get('user_id')
+                    subscription_type = metadata.get('subscription_type')
+                    payment_plan = metadata.get('payment_plan')
 
-    elif event['type'] == 'invoice.payment_failed':
-        invoice = event['data']['object']
-        payment_intent_id = invoice['payment_intent']
-        subscription_payment = SubscriptionPayment.objects.filter(transaction_id=payment_intent_id).first()
-        if subscription_payment:
-            subscription_payment.payment_status = 'failed'
-            subscription_payment.save()
+                    if not user_id or not subscription_type or not payment_plan:
+                        return JsonResponse({'error': 'Missing metadata'}, status=400)
+                    
+                    seller = get_object_or_404(Seller, user_id=user_id)
+                    stripe_subscription_id = event_data.get('subscription')
+                    expiry_date = timezone.now().date() + (timezone.timedelta(days=30) if subscription_type == 'monthly' else timezone.timedelta(days=365))
 
-    return Response(status=200)
+                    subscription = Subscription.objects.create(
+                        seller=seller,
+                        subscription_type=subscription_type,
+                        payment_plan=payment_plan,
+                        ended_at=expiry_date,
+                        stripe_subscription_id=stripe_subscription_id,
+                    )
+
+                    SubscriptionPayment.objects.create(
+                        subscription=subscription,
+                        user=seller,
+                        amount=event_data.get('amount_total', 0) / 100,
+                        payment_date=timezone.now().date(),
+                        expiry_date=expiry_date,
+                        payment_status='paid',
+                        transaction_id=event_data.get('id'),
+                    )
+
+                except stripe.error.StripeError as e:
+                    return JsonResponse({'error': str(e)}, status=500)
+    elif event_type == 'payment_method.attached':
+        print("Payment method attached!")
+    elif event_type == 'customer.created':
+        print("Customer created!")
+    elif event_type == 'customer.updated':
+        print("Customer updated!")
+    elif event_type == 'customer.subscription.created':
+        print("Subscription created!")
+    elif event_type == 'customer.subscription.updated':
+        print("Subscription updated!")
+    elif event_type == 'payment_intent.created':
+        print("PaymentIntent created!")
+    elif event_type == 'invoice.created':
+        print("Invoice created!")
+    elif event_type == 'invoice.finalized':
+        print("Invoice finalized!")
+    elif event_type == 'invoice.updated':
+        print("Invoice updated!")
+    elif event_type == 'invoice.paid':
+        print("Invoice paid!")
+
+    elif event_type == 'invoice.payment_succeeded':
+        print("Invoice payment succeeded.")
+    elif event_type == 'customer.subscription.deleted':
+        print("Subscription deleted ")       
+    
+    else:
+        print(f'Unhandled event type {event_type}')
+
+    return JsonResponse({'success': True})
 
 
-
+@api_view(['GET'])
+def get_session_details(request, session_id):
+    try:
+        session = stripe.checkout.Session.retrieve(session_id)
+        return Response(session)
+    except Exception as e:
+        return Response({'error': str(e)}, status=status.HTTP_400_BAD_REQUEST)
