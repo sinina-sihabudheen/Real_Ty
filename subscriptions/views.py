@@ -168,6 +168,13 @@ def stripe_webhook(request):
                     stripe_subscription_id = event_data.get('subscription')
                     expiry_date = timezone.now().date() + (timezone.timedelta(days=30) if subscription_type == 'monthly' else timezone.timedelta(days=365))
 
+                    if payment_plan == 'premium':
+                        seller.subscription_status = 'premium'
+                    else:
+                        seller.subscription_status = 'free'
+                    seller.save()
+
+                    
                     subscription = Subscription.objects.create(
                         seller=seller,
                         subscription_type=subscription_type,
@@ -198,6 +205,17 @@ def stripe_webhook(request):
         print("Subscription created!")
     elif event_type == 'customer.subscription.updated':
         print("Subscription updated!")
+        subscription_id = event_data.get('id')
+        try:
+            subscription = Subscription.objects.get(stripe_subscription_id=subscription_id)
+            # Update the seller's subscription status if needed
+            if subscription.payment_plan == 'premium':
+                subscription.seller.subscription_status = 'premium'
+            else:
+                subscription.seller.subscription_status = 'free'
+            subscription.seller.save()
+        except Subscription.DoesNotExist:
+            print("Subscription not found for updating seller status.")
     elif event_type == 'payment_intent.created':
         print("PaymentIntent created!")
     elif event_type == 'invoice.created':
@@ -212,7 +230,14 @@ def stripe_webhook(request):
     elif event_type == 'invoice.payment_succeeded':
         print("Invoice payment succeeded.")
     elif event_type == 'customer.subscription.deleted':
-        print("Subscription deleted ")       
+        print("Subscription deleted")
+        subscription_id = event_data.get('id')
+        try:
+            subscription = Subscription.objects.get(stripe_subscription_id=subscription_id)
+            subscription.seller.subscription_status = 'free'  # Revert to free status if subscription is deleted
+            subscription.seller.save()
+        except Subscription.DoesNotExist:
+            print("Subscription not found for updating seller status.")      
     
     else:
         print(f'Unhandled event type {event_type}')

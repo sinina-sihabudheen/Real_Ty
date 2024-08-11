@@ -8,10 +8,10 @@ from rest_framework.exceptions import ValidationError
 from django.utils import timezone
 from rest_framework_simplejwt.tokens import RefreshToken
 from django.core.mail import send_mail
-from .models import User,Seller, LandProperty, ResidentialProperty, EmailDevice, Region, Buyer, Amenity, PropertyCategory, Subscription
+from .models import User,Seller, LandProperty, ResidentialProperty, EmailDevice, Region, Buyer, Amenity, PropertyCategory, Subscription, SubscriptionPayment
 from .serializers import SellerSerializer, RegionSerializer, UpdateUserRoleSerializer, LandPropertySerializer, ResidentialPropertySerializer, RegisterSerializer, AmenitySerializer
 from .serializers import OTPVerificationSerializer, ResendOTPSerializer, PasswordChangeSerializer, ForgotPasswordSerializer, ResetPasswordSerializer, BuyerSerializer
-from .serializers import RegisterResidentialPropertySerializer, RegisterLandPropertySerializer,PropertyImageSerializer
+from .serializers import RegisterResidentialPropertySerializer, RegisterLandPropertySerializer,PropertyImageSerializer,PropertyCategorySerializer
 from rest_framework.views import APIView
 from django.core.exceptions import ObjectDoesNotExist
 from django.contrib.auth import authenticate
@@ -25,6 +25,7 @@ from dj_rest_auth.registration.views import SocialLoginView
 from django.views.decorators.csrf import csrf_exempt
 from django.utils.decorators import method_decorator
 from rest_framework.parsers import MultiPartParser, FormParser
+from django.db.models import Count, Sum
 
 
 
@@ -161,13 +162,6 @@ class CustomLoginView(APIView):
             'role': role,
         }, status=status.HTTP_200_OK)
     
-class RegionViewSet(viewsets.ReadOnlyModelViewSet):
-    permission_classes = [AllowAny]
-    queryset = Region.objects.all()
-    serializer_class = RegionSerializer 
-
-
-
 class UserRegistrationView(generics.CreateAPIView):
     serializer_class = RegisterSerializer
     permission_classes = [AllowAny]
@@ -426,14 +420,35 @@ class LandPropertyDetailView(generics.RetrieveUpdateDestroyAPIView):
     serializer_class = LandPropertySerializer
     permission_classes = [IsAuthenticated]
 
+    def get_object(self):
+        obj = super().get_object()
+        return obj
+
+    def perform_update(self, serializer):
+        serializer.save()
+
+    def delete(self, request, *args, **kwargs):
+        property_instance = self.get_object()
+        property_instance.delete()
+        return Response(status=status.HTTP_204_NO_CONTENT)
+
 class ResidentialPropertyDetailView(generics.RetrieveUpdateDestroyAPIView):
     queryset = ResidentialProperty.objects.all()
     serializer_class = ResidentialPropertySerializer
     permission_classes = [IsAuthenticated]
 
-class AmenityViewSet(viewsets.ModelViewSet):
-    queryset = Amenity.objects.all()
-    serializer_class = AmenitySerializer
+    def get_object(self):
+        obj = super().get_object()
+        return obj
+
+    def perform_update(self, serializer):
+        serializer.save()
+
+    def delete(self, request, *args, **kwargs):
+        property_instance = self.get_object()
+        property_instance.delete()
+        return Response(status=status.HTTP_204_NO_CONTENT)
+
 
 class UpdateUserView(generics.UpdateAPIView):
     serializer_class = UserSerializer
@@ -556,54 +571,98 @@ class UserListAPIView(generics.ListAPIView):
     def get_queryset(self):
      
         return User.objects.exclude(is_admin=True)
+    
+from rest_framework.permissions import IsAdminUser
 
 class UserBlockAPIView(APIView):
-    
+    permission_classes = [IsAdminUser]
+
     def patch(self, request, *args, **kwargs):
         user = User.objects.get(pk=kwargs['pk'])
         user.is_active = False 
         user.save()
         serializer = UserSerializer(user)
         return Response(serializer.data, status=status.HTTP_200_OK)
+
+class UnblockUserAPIView(APIView):
+    permission_classes = [IsAdminUser]
+
+    def patch(self, request, user_id):
+        try:
+            user = User.objects.get(id=user_id)
+            user.is_active = True
+            user.save()
+            return Response({"detail": "User unblocked successfully."}, status=status.HTTP_200_OK)
+        except User.DoesNotExist:
+            return Response({"detail": "User not found."}, status=status.HTTP_404_NOT_FOUND)
      
 # List sellers
 class SellerListAPIView(generics.ListAPIView):
     queryset = Seller.objects.all()
     serializer_class = SellerSerializer
 
-class SellerBlockAPIView(APIView):
-    
+class SellerBlockAPIView(APIView):    
     def patch(self, request, *args, **kwargs):
         seller = Seller.objects.get(pk=kwargs['pk'])
-        seller.is_active = False 
-        seller.save()
+        seller.user.is_active = False 
+        seller.user.save()
         serializer = SellerSerializer(seller)
         return Response(serializer.data, status=status.HTTP_200_OK)
+    
+class SellerUnblockAPIView(APIView):    
+    def patch(self, request, *args, **kwargs):
+        try:
+            seller = Seller.objects.get(pk=kwargs['pk'])
+            seller.user.is_active = True  # Unblock the user
+            seller.user.save()  # Save the User model, not just the Seller model
+
+            serializer = SellerSerializer(seller)
+            return Response(serializer.data, status=status.HTTP_200_OK)
+        except Seller.DoesNotExist:
+            return Response({"detail": "Seller not found."}, status=status.HTTP_404_NOT_FOUND)
 
 # List buyers
 class BuyerListAPIView(generics.ListAPIView):
     queryset = Buyer.objects.all()
     serializer_class = BuyerSerializer
 
-class BuyerBlockAPIView(APIView):
-    
+class BuyerBlockAPIView(APIView):    
     def patch(self, request, *args, **kwargs):
         buyer = Buyer.objects.get(pk=kwargs['pk'])
-        buyer.is_active = False 
-        buyer.save()
+        buyer.user.is_active = False 
+        buyer.user.save()
         serializer = BuyerSerializer(buyer)
         return Response(serializer.data, status=status.HTTP_200_OK)
     
+
+class BuyerUnblockAPIView(APIView):    
+    def patch(self, request, *args, **kwargs):
+        buyer = Buyer.objects.get(pk=kwargs['pk'])
+        buyer.user.is_active = True 
+        buyer.user.save()
+        serializer = BuyerSerializer(buyer)
+        return Response(serializer.data, status=status.HTTP_200_OK)
+
+class RegionViewSet(viewsets.ReadOnlyModelViewSet):
+    permission_classes = [AllowAny]
+    queryset = Region.objects.all()
+    serializer_class = RegionSerializer 
+
 class RegionCreateAPIView(APIView):
+    permission_classes = [IsAuthenticated]
     def post(self, request):
+        print("Received request data:", request.data)
+
         serializer = RegionSerializer(data=request.data)
         if serializer.is_valid():
             serializer.save()
             return Response(serializer.data, status=status.HTTP_201_CREATED)
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
-class RegionDeleteAPIView(APIView):
-    
+
+class RegionDeleteAPIView(APIView):    
+    permission_classes = [IsAuthenticated]
+
     def delete(self, request, pk):
         try:
             region = Region.objects.get(pk=pk)
@@ -612,3 +671,89 @@ class RegionDeleteAPIView(APIView):
 
         region.delete()
         return Response({'message': 'No content'},status=status.HTTP_204_NO_CONTENT)
+    
+
+class CategoryViewSet(viewsets.ReadOnlyModelViewSet):
+    permission_classes = [AllowAny]
+    queryset = PropertyCategory.objects.all()
+    serializer_class = PropertyCategorySerializer 
+
+
+class CategoryCreateAPIView(APIView):
+    def post(self, request):
+        serializer = PropertyCategorySerializer(data=request.data)
+        if serializer.is_valid():
+            serializer.save()
+            return Response(serializer.data, status=status.HTTP_201_CREATED)
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+
+class CategoryDeleteAPIView(APIView):
+    def delete(self, request, pk):
+        try:
+            category = PropertyCategory.objects.get(pk=pk)
+        except PropertyCategory.DoesNotExist:
+            return Response({'message': 'Category not found'}, status=status.HTTP_404_NOT_FOUND)
+
+        category.delete()
+        return Response({'message': 'No content'}, status=status.HTTP_204_NO_CONTENT)
+
+
+
+class AmenityViewSet(viewsets.ModelViewSet):
+    queryset = Amenity.objects.all()
+    serializer_class = AmenitySerializer
+
+
+# Add a new amenity
+class AmenityCreateAPIView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request):
+        serializer = AmenitySerializer(data=request.data)
+        if serializer.is_valid():
+            serializer.save()
+            return Response(serializer.data, status=status.HTTP_201_CREATED)
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+# Delete an amenity
+class AmenityDeleteAPIView(APIView):
+    def delete(self, request, pk):
+        try:
+            amenity = Amenity.objects.get(pk=pk)
+        except Amenity.DoesNotExist:
+            return Response({'message': 'Amenity not found'}, status=status.HTTP_404_NOT_FOUND)
+
+        amenity.delete()
+        return Response({'message': 'No content'}, status=status.HTTP_204_NO_CONTENT)
+
+
+
+
+def admin_dashboard_data(request):   
+    total_land_properties = LandProperty.objects.count()
+    total_residential_properties = ResidentialProperty.objects.count()
+    total_apartments = ResidentialProperty.objects.filter(property_type='Apartment').count()
+    total_villas = ResidentialProperty.objects.filter(property_type='Villa').count()
+    total_listings = total_land_properties + total_residential_properties
+
+    subscription_growth = SubscriptionPayment.objects.count()
+    total_revenue = SubscriptionPayment.objects.aggregate(total=Sum('amount'))['total']
+
+    total_users = User.objects.count()
+    total_sellers  = Seller.objects.count()
+    total_buyers = Buyer.objects.count()
+   
+    return JsonResponse({
+        'total_listings': total_listings,
+        'total_land_properties': total_land_properties,
+        'total_residential_properties': total_residential_properties,
+        'total_apartments' : total_apartments,
+        'total_villas' : total_villas,
+        'subscription_growth': subscription_growth,
+        'total_revenue': total_revenue,
+        'total_users' : total_users,
+        'total_sellers' : total_sellers,
+        'total_buyers' : total_buyers
+
+    })

@@ -54,10 +54,10 @@ class PropertyImageAdmin(admin.ModelAdmin):
 
 @admin.register(Subscription)
 class SubscriptionAdmin(admin.ModelAdmin):
-    list_display = ['id', 'seller', 'subscription_type', 'started_at', 'ended_at', 'payment_plan']
+    list_display = ['id', 'seller', 'subscription_type', 'started_at', 'ended_at', 'payment_plan',]
 
 
 @admin.register(SubscriptionPayment)
 class SubscriptionPaymentAdmin(admin.ModelAdmin):
-    list_display = ['id', 'user', 'subscription', 'amount', 'payment_date', 'expiry_date', 'payment_status']
+    list_display = ['id', 'user', 'subscription', 'amount', 'payment_date', 'expiry_date', 'payment_status','transaction_id']
   

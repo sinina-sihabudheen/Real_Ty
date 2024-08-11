@@ -15,6 +15,11 @@ class RegionSerializer(serializers.ModelSerializer):
 class AmenitySerializer(serializers.ModelSerializer):
     class Meta:
         model = Amenity
+        fields = ['id', 'name' ]
+        
+class PropertyCategorySerializer(serializers.ModelSerializer):
+    class Meta:
+        model = PropertyCategory
         fields = '__all__'  
 
 class UserSerializer(serializers.ModelSerializer):
@@ -22,7 +27,7 @@ class UserSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = User
-        fields = ['id', 'username', 'email', 'address', 'contact_number', 'profile_image', 'is_seller', 'is_buyer', 'date_of_birth','social_provider']
+        fields = ['id', 'username', 'email', 'address', 'contact_number', 'profile_image', 'is_seller', 'is_buyer', 'date_of_birth','social_provider','is_active']
 
     def update(self, instance, validated_data):
         profile_image = validated_data.pop('profile_image', None)
@@ -246,14 +251,24 @@ class LandPropertySerializer(serializers.ModelSerializer):
         if value and not PropertyCategory.objects.filter(name=value).exists():
             raise serializers.ValidationError('Category does not exist.')
         return value
+    
+    def update(self, instance, validated_data):
+        category_name = validated_data.pop('category', None)
+        if category_name:
+            category = PropertyCategory.objects.get(name=category_name)
+            instance.category = category
+
+        for attr, value in validated_data.items():
+            setattr(instance, attr, value)
+
+        instance.save()
+        return instance
 
 class ResidentialPropertySerializer(serializers.ModelSerializer):
     images = PropertyImageSerializer(many=True, read_only=True)
-    # amenities = AmenitySerializer(many=True, read_only=True)
     amenities = serializers.StringRelatedField(many=True)
 
     category = serializers.CharField()  
-    # amenities = serializers.PrimaryKeyRelatedField(many=True, queryset=Amenity.objects.all())
     seller = SellerSerializer(read_only=True)
 
 
@@ -267,6 +282,19 @@ class ResidentialPropertySerializer(serializers.ModelSerializer):
         if not PropertyCategory.objects.filter(name=value).exists():
             raise serializers.ValidationError('Category does not exist.')
         return value
+    
+    def update(self, instance, validated_data):
+        category_name = validated_data.pop('category', None)
+        if category_name:
+            category = PropertyCategory.objects.get(name=category_name)
+            instance.category = category
+
+        for attr, value in validated_data.items():
+            setattr(instance, attr, value)
+
+        instance.save()
+        return instance
+    
 
 class OTPSerializer(serializers.Serializer):
     email = serializers.EmailField()

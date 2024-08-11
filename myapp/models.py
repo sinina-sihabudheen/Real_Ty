@@ -172,4 +172,3 @@ class SubscriptionPayment(models.Model):
     transaction_id = models.CharField(max_length=100)
 
 
-# prod_QZPImNYg1Fqs5v
