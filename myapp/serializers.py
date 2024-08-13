@@ -235,10 +235,9 @@ class RegisterResidentialPropertySerializer(serializers.ModelSerializer):
     
 class LandPropertySerializer(serializers.ModelSerializer):
     images = PropertyImageSerializer(many=True, read_only=True)
-    # amenities = AmenitySerializer(many=True, read_only=True)
-    amenities = serializers.StringRelatedField(many=True)
+    # amenities = serializers.StringRelatedField(many=True)
+    amenities = serializers.PrimaryKeyRelatedField(queryset=Amenity.objects.all(), many=True)
 
-    # amenities = serializers.PrimaryKeyRelatedField(queryset=Amenity.objects.all(), many=True)
     category = serializers.CharField()  
     seller = SellerSerializer(read_only=True)
 
@@ -254,6 +253,15 @@ class LandPropertySerializer(serializers.ModelSerializer):
     
     def update(self, instance, validated_data):
         category_name = validated_data.pop('category', None)
+        amenities_data = validated_data.pop('amenities', None)
+        
+        # Update other fields
+        for attr, value in validated_data.items():
+            setattr(instance, attr, value)
+        
+        # Handle many-to-many field
+        if amenities_data is not None:
+            instance.amenities.set(amenities_data)
         if category_name:
             category = PropertyCategory.objects.get(name=category_name)
             instance.category = category
@@ -266,7 +274,8 @@ class LandPropertySerializer(serializers.ModelSerializer):
 
 class ResidentialPropertySerializer(serializers.ModelSerializer):
     images = PropertyImageSerializer(many=True, read_only=True)
-    amenities = serializers.StringRelatedField(many=True)
+    # amenities = serializers.StringRelatedField(many=True)
+    amenities = serializers.PrimaryKeyRelatedField(queryset=Amenity.objects.all(), many=True)
 
     category = serializers.CharField()  
     seller = SellerSerializer(read_only=True)
@@ -285,6 +294,16 @@ class ResidentialPropertySerializer(serializers.ModelSerializer):
     
     def update(self, instance, validated_data):
         category_name = validated_data.pop('category', None)
+        amenities_data = validated_data.pop('amenities', None)
+        
+        # Update other fields
+        for attr, value in validated_data.items():
+            setattr(instance, attr, value)
+        
+        # Handle many-to-many field
+        if amenities_data is not None:
+            instance.amenities.set(amenities_data)
+
         if category_name:
             category = PropertyCategory.objects.get(name=category_name)
             instance.category = category

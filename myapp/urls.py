@@ -80,6 +80,8 @@ urlpatterns = [
     path('lands/<int:pk>/', LandPropertyDetailView.as_view(), name='land-detail'),
     path('residentials/<int:pk>/', ResidentialPropertyDetailView.as_view(), name='residential-detail'),
 
+    path('lands/update/<int:pk>/', LandPropertyDetailView.as_view(), name='land-update'),
+    path('residentials/update/<int:pk>/', ResidentialPropertyDetailView.as_view(), name='residential-update'),
 
 ]
 

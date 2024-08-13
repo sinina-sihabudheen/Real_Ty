@@ -425,6 +425,12 @@ class LandPropertyDetailView(generics.RetrieveUpdateDestroyAPIView):
         return obj
 
     def perform_update(self, serializer):
+        instance = self.get_object()
+
+        video = self.request.FILES.get('video')
+        if video:
+            serializer.validated_data['video'] = video
+        
         serializer.save()
 
     def delete(self, request, *args, **kwargs):
@@ -442,6 +448,11 @@ class ResidentialPropertyDetailView(generics.RetrieveUpdateDestroyAPIView):
         return obj
 
     def perform_update(self, serializer):
+        instance = self.get_object()
+        video = self.request.FILES.get('video')
+        if video:
+            serializer.validated_data['video'] = video
+        
         serializer.save()
 
     def delete(self, request, *args, **kwargs):
