@@ -83,5 +83,8 @@ urlpatterns = [
     path('lands/update/<int:pk>/', LandPropertyDetailView.as_view(), name='land-update'),
     path('residentials/update/<int:pk>/', ResidentialPropertyDetailView.as_view(), name='residential-update'),
 
+    path('lands/delete/<int:pk>/', LandPropertyDetailView.as_view(), name='land-delete'),
+    path('residentials/delete/<int:pk>/', ResidentialPropertyDetailView.as_view(), name='residential-delete'),
+
 ]
 
