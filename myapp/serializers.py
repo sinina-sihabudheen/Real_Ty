@@ -1,7 +1,7 @@
 from rest_framework import serializers
 from django.contrib.auth import get_user_model
 from django.core.validators import RegexValidator
-from .models import Seller, LandProperty, ResidentialProperty, EmailDevice, Region, Buyer, Amenity, PropertyCategory, PropertyImage
+from .models import LandProperty, ResidentialProperty, EmailDevice, Region, Amenity, PropertyCategory, PropertyImage, Subscription, SubscriptionPayment
 from django.contrib.auth.password_validation import validate_password
 
 
@@ -20,14 +20,14 @@ class AmenitySerializer(serializers.ModelSerializer):
 class PropertyCategorySerializer(serializers.ModelSerializer):
     class Meta:
         model = PropertyCategory
-        fields = '__all__'  
+        fields = ['id','name']  
 
 class UserSerializer(serializers.ModelSerializer):
     profile_image = serializers.ImageField(required=False)
 
     class Meta:
         model = User
-        fields = ['id', 'username', 'email', 'address', 'contact_number', 'profile_image', 'is_seller', 'is_buyer', 'date_of_birth','social_provider','is_active']
+        fields = ['id', 'username', 'email', 'address', 'contact_number', 'profile_image','agency_name', 'social_provider','is_active']
 
     def update(self, instance, validated_data):
         profile_image = validated_data.pop('profile_image', None)
@@ -39,14 +39,12 @@ class UserSerializer(serializers.ModelSerializer):
 
 class RegisterSerializer(serializers.ModelSerializer):
     confirm_password = serializers.CharField(write_only=True)
-    is_seller = serializers.BooleanField(write_only=True, required=False)
     agency_name = serializers.CharField(write_only=True, required=False)
-    regions = serializers.PrimaryKeyRelatedField(queryset=Region.objects.all(), write_only=True, many=True, required=False)
     token = serializers.CharField(write_only=True, required=False)
 
     class Meta:
         model = User
-        fields = ['username', 'email', 'password', 'confirm_password', 'address', 'contact_number', 'is_seller', 'is_buyer', 'agency_name', 'regions', 'token']
+        fields = ['username', 'email', 'password', 'confirm_password', 'address', 'contact_number', 'agency_name', 'token']
        
         extra_kwargs = {
             'password': {'write_only': True},
@@ -87,8 +85,6 @@ class RegisterSerializer(serializers.ModelSerializer):
         errors = {}
         if data['password'] != data['confirm_password']:
             errors['confirm_password'] = ["Passwords do not match."]
-        if data.get('is_seller') and (not data.get('agency_name') or not data.get('regions')):
-            errors['agency_name'] = ["Agency name and regions are required for seller registration."]
         if errors:
             raise serializers.ValidationError(errors)
         return data
@@ -97,31 +93,15 @@ class RegisterSerializer(serializers.ModelSerializer):
         validated_data.pop('confirm_password', None)
         token = validated_data.pop('token', None)
         
-        is_seller = validated_data.get('is_seller', False)
-        is_buyer = not is_seller
 
-        validated_data['is_seller'] = is_seller
-        validated_data['is_buyer'] = is_buyer
-        print(f"Creating user with is_seller={is_seller} and is_buyer={is_buyer}")
-        
         user = User.objects.create_user(
             username=validated_data['username'],
             email=validated_data['email'], 
             password=validated_data['password'],
             address=validated_data.get('address'),
             contact_number=validated_data.get('contact_number'),
-            is_seller=is_seller,
-            is_buyer=is_buyer
+            agency_name=validated_data['agency_name'],            
         )
-
-        if is_seller:
-            seller_profile = Seller.objects.create(
-                user=user, 
-                agency_name=validated_data['agency_name'],
-            )
-            seller_profile.regions.set(validated_data['regions'])
-        else:
-            Buyer.objects.create(user=user)
 
         return {
             'validated_data': validated_data,
@@ -138,33 +118,6 @@ class ResetPasswordSerializer(serializers.Serializer):
     password = serializers.CharField()
     confirm_password = serializers.CharField()
 
-class SellerSerializer(serializers.ModelSerializer):
-    user = UserSerializer(read_only=True)
-    regions = RegionSerializer(many=True,read_only=True)
-
-    class Meta:
-        model = Seller
-        fields = ['id', 'user', 'agency_name', 'regions', 'subscription_status', 'subscription_end_date']
-
-    def create(self, validated_data):
-        regions_data = validated_data.pop('regions', [])
-        user_data = validated_data.pop('user')
-
-        user = User.objects.create_user(**user_data)
-        seller = Seller.objects.create(user=user, **validated_data)
-
-        for region_data in regions_data:
-            region, _ = Region.objects.get_or_create(**region_data)
-            seller.regions.add(region)
-
-        return seller
-
-class BuyerSerializer(serializers.ModelSerializer):
-    user = UserSerializer()
-
-    class Meta:
-        model = Buyer
-        fields = ['id', 'user']
 
 class PropertyImageSerializer(serializers.ModelSerializer):
     class Meta:
@@ -172,74 +125,81 @@ class PropertyImageSerializer(serializers.ModelSerializer):
         fields = ['image', 'land_property', 'residential_property']
 
 
+
+
 class RegisterLandPropertySerializer(serializers.ModelSerializer):
     images = PropertyImageSerializer(many=True, read_only=True)
     new_images = serializers.ListField(
         child=serializers.ImageField(), write_only=True, required=False
     )
-
     amenities = serializers.PrimaryKeyRelatedField(queryset=Amenity.objects.all(), many=True)
-    category = serializers.CharField()  
-    seller = serializers.PrimaryKeyRelatedField(read_only=True)
+    category = serializers.CharField()
+    seller = UserSerializer(read_only=True)
 
     class Meta:
         model = LandProperty
-        fields = ['price', 'description', 'area', 'amenities', 'location', 'video', 'category', 'seller','images','new_images']
-        
-    def validate_category(self, value):
-        if value and not PropertyCategory.objects.filter(name=value).exists():
-            raise serializers.ValidationError('Category does not exist.')
-        return value
+        fields = ['id', 'price', 'description', 'area', 'amenities', 'location', 'video', 'category', 'seller', 'images', 'new_images']
+
+    def validate(self, data):
+        category_name = data.get('category')
+        if category_name:
+            try:
+                category = PropertyCategory.objects.get(name=category_name)
+                data['category'] = category.id  # Use ID instead of instance
+            except PropertyCategory.DoesNotExist:
+                raise serializers.ValidationError({'category': 'Category does not exist.'})
+        return data
     
     def create(self, validated_data):
-        new_images = validated_data.pop('new_images', [])    
-        if new_images:
-            print("IMAGES ADDED")
-        else:
-            print("IMAGES NOT ADDED")
-
-        print(f"Validated data: {validated_data}")
-
+        new_images = validated_data.pop('new_images', [])
         land_property = super().create(validated_data)
-        for image in new_images:
-            print(f"Creating PropertyImage with land_property={land_property} and image={image}")
 
+        for image in new_images:
             PropertyImage.objects.create(land_property=land_property, image=image)
+
         return land_property
+
+
 
 class RegisterResidentialPropertySerializer(serializers.ModelSerializer):
     images = PropertyImageSerializer(many=True, read_only=True)
     new_images = serializers.ListField(
         child=serializers.ImageField(), write_only=True, required=False
     )
-
-    category = serializers.CharField()  
-    amenities = serializers.PrimaryKeyRelatedField(queryset=Amenity.objects.all(),many=True)
+    category = serializers.CharField()  # Accept category as name (string)
+    amenities = serializers.PrimaryKeyRelatedField(queryset=Amenity.objects.all(), many=True)
     seller = serializers.PrimaryKeyRelatedField(read_only=True)
 
     class Meta:
         model = ResidentialProperty
-        fields = ['seller', 'category', 'property_type', 'price', 'location', 'num_rooms', 'num_bathrooms', 'size', 'amenities', 'description', 'land_area', 'video','images','new_images']
+        fields = ['seller', 'category', 'property_type', 'price', 'location', 'num_rooms', 'num_bathrooms', 'size', 'amenities', 'description', 'land_area', 'video', 'images', 'new_images']
 
-    def validate_category(self, value):
-        if not PropertyCategory.objects.filter(name=value).exists():
-            raise serializers.ValidationError('Category does not exist.')
-        return value
-    
+    def validate(self, data):
+        category_name = data.get('category')
+        if category_name:
+            try:
+                category = PropertyCategory.objects.get(name=category_name)
+                data['category'] = category.id  # Use ID instead of instance
+            except PropertyCategory.DoesNotExist:
+                raise serializers.ValidationError({'category': 'Category does not exist.'})
+        return data
+
     def create(self, validated_data):
         new_images = validated_data.pop('new_images', [])
         residential_property = super().create(validated_data)
+
         for image in new_images:
             PropertyImage.objects.create(residential_property=residential_property, image=image)
+
         return residential_property
+
     
 class LandPropertySerializer(serializers.ModelSerializer):
     images = PropertyImageSerializer(many=True, read_only=True)
-    # amenities = serializers.StringRelatedField(many=True)
     amenities = serializers.PrimaryKeyRelatedField(queryset=Amenity.objects.all(), many=True)
 
     category = serializers.CharField()  
-    seller = SellerSerializer(read_only=True)
+    seller = UserSerializer(read_only=True)
 
 
     class Meta:
@@ -270,15 +230,15 @@ class LandPropertySerializer(serializers.ModelSerializer):
             setattr(instance, attr, value)
 
         instance.save()
+    
         return instance
 
 class ResidentialPropertySerializer(serializers.ModelSerializer):
     images = PropertyImageSerializer(many=True, read_only=True)
-    # amenities = serializers.StringRelatedField(many=True)
     amenities = serializers.PrimaryKeyRelatedField(queryset=Amenity.objects.all(), many=True)
 
     category = serializers.CharField()  
-    seller = SellerSerializer(read_only=True)
+    seller = UserSerializer(read_only=True)
 
 
     class Meta:
@@ -358,36 +318,19 @@ class PasswordChangeSerializer(serializers.Serializer):
         instance.save()
         return instance
     
-class UpdateUserRoleSerializer(serializers.ModelSerializer):
-    agency_name = serializers.CharField(required=False)
-    regions = serializers.ListField(
-        child=serializers.IntegerField(), required=False
-    )
+class SubscriptionSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Subscription
+        fields = ['subscription_type', 'payment_plan', 'started_at', 'ended_at','seller']
+
+class UserWithSubscriptionSerializer(serializers.ModelSerializer):
+    subscriptions = serializers.SerializerMethodField()
 
     class Meta:
         model = User
-        fields = ['is_seller', 'is_buyer', 'agency_name', 'regions']
+        fields = ['id', 'username', 'email', 'subscriptions','is_active']
 
-    def update(self, instance, validated_data):
-        is_seller = validated_data.get('is_seller', instance.is_seller)
-        is_buyer = validated_data.get('is_buyer', instance.is_buyer)
-        agency_name = validated_data.get('agency_name', None)
-        regions_data = validated_data.get('regions', [])
-
-        instance.is_seller = is_seller
-        instance.is_buyer = is_buyer
-        instance.save()
-
-        if is_seller:
-            seller, created = Seller.objects.get_or_create(user=instance)
-            if agency_name:
-                seller.agency_name = agency_name
-            if regions_data:
-                regions = Region.objects.filter(id__in=regions_data)
-                seller.regions.set(regions)
-            seller.save()
-
-        if is_buyer:
-            Buyer.objects.get_or_create(user=instance)
-
-        return instance
+    def get_subscriptions(self, user):
+        # Filter subscriptions where the seller is the current user
+        subscriptions = Subscription.objects.filter(seller=user)
+        return SubscriptionSerializer(subscriptions, many=True).data

@@ -4,7 +4,7 @@ from django.utils import timezone
 from rest_framework.decorators import api_view, permission_classes
 from rest_framework.response import Response
 from rest_framework import status
-from myapp.models import Subscription, SubscriptionPayment, Seller, User, LandProperty, ResidentialProperty
+from myapp.models import Subscription, SubscriptionPayment, User, LandProperty, ResidentialProperty
 from django.shortcuts import get_object_or_404
 from rest_framework.permissions import IsAuthenticated, AllowAny
 from django.views.decorators.csrf import csrf_exempt
@@ -20,7 +20,7 @@ logger = logging.getLogger(__name__)
 stripe.api_key = settings.STRIPE_SECRET_KEY
 endpoint_secret = settings.STRIPE_WEBHOOK_SECRET_KEY
 
-# @permission_classes([IsAuthenticated])
+
 @api_view(['POST'])
 def create_subscription(request):
     user_id = request.data.get('user_id')
@@ -28,9 +28,8 @@ def create_subscription(request):
     subscription_type = request.data.get('subscription_type')
     payment_plan = request.data.get('payment_plan')
 
-    seller = get_object_or_404(Seller, user_id=user_id)
+    seller = get_object_or_404(User, id=user_id)
 
-    # Cancel and delete existing subscriptions
     existing_subscriptions = Subscription.objects.filter(seller=seller).order_by('-started_at')
     if existing_subscriptions.exists():
         for sub in existing_subscriptions:
@@ -38,7 +37,6 @@ def create_subscription(request):
                 stripe.Subscription.delete(sub.stripe_subscription_id)
             sub.delete()
 
-    # Define Stripe price IDs for monthly and yearly plans
     price_id = 'price_1PiGUIGYaADgjXW8tSAwmjcb' if subscription_type == 'monthly' else 'price_1PiHKhGYaADgjXW8hbcbDHEV'
 
     
@@ -70,7 +68,7 @@ def create_subscription(request):
 def cancel_subscription(request):
     try:
         user = request.user
-        subscription = get_object_or_404(Subscription, seller__user=user, ended_at__isnull=True)
+        subscription = get_object_or_404(Subscription,user=user, ended_at__isnull=True)
         
         if subscription.stripe_subscription_id:
             stripe.Subscription.delete(subscription.stripe_subscription_id)
@@ -84,43 +82,56 @@ def cancel_subscription(request):
     except Exception as e:
         return Response(status=status.HTTP_400_BAD_REQUEST, data={'error': str(e)})
 
+
+
 @api_view(['GET'])
 def check_subscription(request, user_id):
+    subscriptionId = None  # Initialize to None
+
     try:
         user = get_object_or_404(User, id=user_id)
-        seller = get_object_or_404(Seller, user=user)
-
-        print("SELLER:",seller)
         
-        subscription = Subscription.objects.filter(seller=seller).order_by('-started_at').first()
-        print("SUBSCRIPTION",subscription)
+        subscription = Subscription.objects.filter(seller=user).order_by('-started_at').first()
+        current_date = timezone.now().date() 
         if subscription:
-            current_date = timezone.now().date()
-            if subscription.ended_at:
-                is_subscribed = current_date <= subscription.ended_at
-                days_left = (subscription.ended_at - current_date).days if is_subscribed else 0
-            else:
-                is_subscribed = False
-                days_left = 0
+            if subscription.payment_plan == 'basic':
+   
+                ended_at = subscription.ended_at if subscription.ended_at else current_date
+                subscriptionExpired = current_date > ended_at
+            else:  
+                ended_at = subscription.ended_at if subscription.ended_at else current_date
+                subscriptionExpired = current_date > ended_at
+            
+            is_subscribed = not subscriptionExpired
+            days_left = (ended_at - current_date).days if not subscriptionExpired and ended_at else 0
+            subscription_type = subscription.subscription_type
+            payment_plan = subscription.payment_plan
+            subscriptionId = subscription.id
         else:
-            is_subscribed = False
-            days_left = 0
-        
-        property_count = LandProperty.objects.filter(seller=seller).count() + ResidentialProperty.objects.filter(seller=seller).count()
+            subscription_end_date = user.subscription_end_date.date()  
+            subscriptionExpired = current_date > subscription_end_date
+            is_subscribed = not subscriptionExpired
+            days_left = (subscription_end_date - current_date).days if not subscriptionExpired and subscription_end_date else 0
+            subscription_type = user.subscription_status
+            payment_plan = user.subscription_status
+
+        property_count = LandProperty.objects.filter(seller=user).count() + \
+                         ResidentialProperty.objects.filter(seller=user).count()
 
         response = {
+            'subscriptionId' : subscriptionId,
             'isSubscribed': is_subscribed,
             'daysLeft': days_left,
             'propertyCount': property_count,
-            'subscriptionType': subscription.subscription_type if subscription else None,
-            'paymentPlan': subscription.payment_plan if subscription else 'free',
+            'subscriptionType': subscription_type,
+            'paymentPlan': payment_plan,
+            'subscriptionExpired': subscriptionExpired,
         }
 
-        return Response(response)
+        return Response(response, status=status.HTTP_200_OK)
     except Exception as e:
         logger.error(f"Error checking subscription for user_id {user_id}: {e}")
-        return Response({'detail': 'Internal Server Error'}, status=500)
-    
+        return Response({'detail': 'Internal Server Error'}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
  
 @csrf_exempt
 def stripe_webhook(request):
@@ -133,13 +144,10 @@ def stripe_webhook(request):
             payload, sig_header, endpoint_secret
         )
     except ValueError:
-        # Invalid payload
         return JsonResponse({'error': 'Invalid payload'}, status=400)
     except stripe.error.SignatureVerificationError:
-        # Invalid signature
         return JsonResponse({'error': 'Invalid signature'}, status=400)
 
-    # Handle the event
     event_type = event['type']
     event_data = event['data']['object']
     if event_type == 'payment_intent.succeeded':
@@ -150,48 +158,44 @@ def stripe_webhook(request):
             print("Checkout session completed!")
           
             session_id = event_data.get('id')
-            print("SESSIONIDs",session_id)
             if session_id:
                 try:
-                    # Retrieve the Checkout Session to get metadata
                     session = stripe.checkout.Session.retrieve(session_id)
                     metadata = session.get('metadata', {})
-
                     user_id = metadata.get('user_id')
                     subscription_type = metadata.get('subscription_type')
                     payment_plan = metadata.get('payment_plan')
-
                     if not user_id or not subscription_type or not payment_plan:
                         return JsonResponse({'error': 'Missing metadata'}, status=400)
                     
-                    seller = get_object_or_404(Seller, user_id=user_id)
+                    seller = get_object_or_404(User, id=user_id)
                     stripe_subscription_id = event_data.get('subscription')
-                    expiry_date = timezone.now().date() + (timezone.timedelta(days=30) if subscription_type == 'monthly' else timezone.timedelta(days=365))
-
-                    if payment_plan == 'premium':
-                        seller.subscription_status = 'premium'
-                    else:
-                        seller.subscription_status = 'free'
-                    seller.save()
-
+                    expiry_date = timezone.now() + (timezone.timedelta(days=30) if subscription_type == 'monthly' else timezone.timedelta(days=365))                    
                     
                     subscription = Subscription.objects.create(
                         seller=seller,
                         subscription_type=subscription_type,
                         payment_plan=payment_plan,
                         ended_at=expiry_date,
-                        stripe_subscription_id=stripe_subscription_id,
+                        stripe_subscription_id=stripe_subscription_id
                     )
 
                     SubscriptionPayment.objects.create(
                         subscription=subscription,
-                        user=seller,
                         amount=event_data.get('amount_total', 0) / 100,
                         payment_date=timezone.now().date(),
                         expiry_date=expiry_date,
                         payment_status='paid',
-                        transaction_id=event_data.get('id'),
+                        transaction_id=event_data.get('id')
                     )
+                    if payment_plan == 'premium':
+                        seller.subscription_status = 'premium'
+
+                    else:
+                        seller.subscription_status = 'basic'
+
+                    seller.subscription_end_date = expiry_date
+                    seller.save()                
 
                 except stripe.error.StripeError as e:
                     return JsonResponse({'error': str(e)}, status=500)
@@ -208,11 +212,10 @@ def stripe_webhook(request):
         subscription_id = event_data.get('id')
         try:
             subscription = Subscription.objects.get(stripe_subscription_id=subscription_id)
-            # Update the seller's subscription status if needed
             if subscription.payment_plan == 'premium':
                 subscription.seller.subscription_status = 'premium'
             else:
-                subscription.seller.subscription_status = 'free'
+                subscription.seller.subscription_status = 'basic'
             subscription.seller.save()
         except Subscription.DoesNotExist:
             print("Subscription not found for updating seller status.")
@@ -234,7 +237,7 @@ def stripe_webhook(request):
         subscription_id = event_data.get('id')
         try:
             subscription = Subscription.objects.get(stripe_subscription_id=subscription_id)
-            subscription.seller.subscription_status = 'free'  # Revert to free status if subscription is deleted
+            subscription.seller.subscription_status = 'basic' 
             subscription.seller.save()
         except Subscription.DoesNotExist:
             print("Subscription not found for updating seller status.")      
@@ -252,3 +255,28 @@ def get_session_details(request, session_id):
         return Response(session)
     except Exception as e:
         return Response({'error': str(e)}, status=status.HTTP_400_BAD_REQUEST)
+    
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def get_invoice(request, subscription_id):
+    try:
+        subscription = get_object_or_404(Subscription, id=subscription_id, seller=request.user)
+
+        invoices = stripe.Invoice.list(subscription=subscription.stripe_subscription_id)
+        if invoices.data:
+            latest_invoice = invoices.data[0]  
+            invoice_url = latest_invoice.invoice_pdf  
+            return Response({
+                'invoice_url': invoice_url,
+                'amount_paid': latest_invoice.amount_paid / 100,  
+                'status': latest_invoice.status,
+                'payment_date': latest_invoice.created,
+                'customerName' : latest_invoice.customer_name,
+                'customerEmail' : latest_invoice.customer_email
+
+            }, status=status.HTTP_200_OK)
+        else:
+            return Response({'detail': 'No invoices found for this subscription.'}, status=status.HTTP_404_NOT_FOUND)
+    except stripe.error.StripeError as e:
+        return Response({'error': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+

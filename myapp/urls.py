@@ -1,18 +1,16 @@
 from django.urls import path, include
 from rest_framework.routers import DefaultRouter
 from .views import (
-    GoogleLoginView,
+    GoogleLoginView, PremiumUserListAPIView, PropertySearchView, UserBlockAPIView, UnblockUserAPIView,
     UserRegistrationView, OTPVerificationView, CustomLoginView,
     ResendOTPView, ForgotPasswordView,RegionViewSet, 
     UserDetailView, UpdateUserView, ChangePasswordView, 
-    AdminLoginView, UpdateUserRole, ResetPasswordView,
-    UserListAPIView, UserBlockAPIView, SellerListAPIView, UnblockUserAPIView,
-    SellerBlockAPIView, BuyerListAPIView, BuyerBlockAPIView, BuyerUnblockAPIView,
+    AdminLoginView, ResetPasswordView, UserListAPIView, 
     RegisterLandsViewSet, RegisterResidentialsViewSet, AmenityViewSet,
     RegionCreateAPIView, RegionDeleteAPIView, SellerResidentsViewSet, 
     SellerLandsViewSet,LandPropertyDetailView,AmenityCreateAPIView, 
     AmenityDeleteAPIView,ResidentialPropertyDetailView, LandsListViewSet, 
-    ResidentsListViewSet,SellerDetailView, CategoryViewSet, SellerUnblockAPIView,
+    ResidentsListViewSet, CategoryViewSet, 
     admin_dashboard_data, CategoryCreateAPIView, CategoryDeleteAPIView, 
 )
 
@@ -42,11 +40,9 @@ urlpatterns = [
     path('verify-otp/', OTPVerificationView.as_view(), name='verify-otp'),
     path('resend-otp/', ResendOTPView.as_view(), name='resend-otp'),
     path('user/', UserDetailView.as_view(), name='user-detail'),
-    path('seller/<int:id>/',SellerDetailView.as_view(), name='seller-detail'),
 
     path('update-user/', UpdateUserView.as_view(), name='update-user'),
     path('change-password/', ChangePasswordView.as_view(), name='change-password'),
-    path('update-role/', UpdateUserRole.as_view(), name='update_role'),
     
     path('forgot_password/', ForgotPasswordView.as_view(), name='forgot_password'),
     path('reset_password/', ResetPasswordView.as_view(), name='reset_password'),
@@ -54,16 +50,6 @@ urlpatterns = [
     path('users_list/', UserListAPIView.as_view(), name='users-list'),
     path('users/<int:pk>/block/', UserBlockAPIView.as_view(), name='block-user'),
     path('users/<int:user_id>/unblock/', UnblockUserAPIView.as_view(), name='unblock-user'),
-
-
-    path('sellers_list/', SellerListAPIView.as_view(), name='sellers-list'),
-    path('sellers/<int:pk>/block/', SellerBlockAPIView.as_view(), name='block-seller'),
-    path('sellers/<int:pk>/unblock/', SellerUnblockAPIView.as_view(), name='unblock-seller'),
-
-
-    path('buyers_list/', BuyerListAPIView.as_view(), name='buyers-list'),
-    path('buyers/<int:pk>/block/', BuyerBlockAPIView.as_view(), name='block-buyer'),
-    path('buyers/<int:pk>/unblock/', BuyerUnblockAPIView.as_view(), name='unblock-buyer'),
 
 
     path('regions/add/', RegionCreateAPIView.as_view(), name='region-add'),
@@ -85,6 +71,10 @@ urlpatterns = [
 
     path('lands/delete/<int:pk>/', LandPropertyDetailView.as_view(), name='land-delete'),
     path('residentials/delete/<int:pk>/', ResidentialPropertyDetailView.as_view(), name='residential-delete'),
+
+    path('search/', PropertySearchView.as_view(), name='property_search'),
+    path('premium-users/', PremiumUserListAPIView.as_view(), name='premium-users-list'),
+
 
 ]
 

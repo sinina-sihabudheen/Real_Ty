@@ -8,26 +8,24 @@ from rest_framework.exceptions import ValidationError
 from django.utils import timezone
 from rest_framework_simplejwt.tokens import RefreshToken
 from django.core.mail import send_mail
-from .models import User,Seller, LandProperty, ResidentialProperty, EmailDevice, Region, Buyer, Amenity, PropertyCategory, Subscription, SubscriptionPayment
-from .serializers import SellerSerializer, RegionSerializer, UpdateUserRoleSerializer, LandPropertySerializer, ResidentialPropertySerializer, RegisterSerializer, AmenitySerializer
-from .serializers import OTPVerificationSerializer, ResendOTPSerializer, PasswordChangeSerializer, ForgotPasswordSerializer, ResetPasswordSerializer, BuyerSerializer
+from .models import User, LandProperty, ResidentialProperty, EmailDevice, Region, Amenity, PropertyCategory, Subscription, SubscriptionPayment
+from .serializers import RegionSerializer, LandPropertySerializer, ResidentialPropertySerializer, RegisterSerializer, AmenitySerializer, UserWithSubscriptionSerializer
+from .serializers import OTPVerificationSerializer, ResendOTPSerializer, PasswordChangeSerializer, ForgotPasswordSerializer, ResetPasswordSerializer
 from .serializers import RegisterResidentialPropertySerializer, RegisterLandPropertySerializer,PropertyImageSerializer,PropertyCategorySerializer
 from rest_framework.views import APIView
 from django.core.exceptions import ObjectDoesNotExist
 from django.contrib.auth import authenticate
 from .serializers import UserSerializer
-from django.db import transaction
 from rest_framework.permissions import AllowAny,IsAuthenticated
 from django.conf import settings
 import requests
-from allauth.socialaccount.providers.facebook.views import FacebookOAuth2Adapter
 from dj_rest_auth.registration.views import SocialLoginView
 from django.views.decorators.csrf import csrf_exempt
 from django.utils.decorators import method_decorator
 from rest_framework.parsers import MultiPartParser, FormParser
 from django.db.models import Count, Sum
-
-
+from django.views.generic import ListView
+from django.db.models import Q
 
 
 User = get_user_model()
@@ -44,15 +42,12 @@ class GoogleLoginView(APIView):
     permission_classes = [AllowAny]
 
     def post(self, request, *args, **kwargs):
-        print("ENTERED INTO GOOGLE")
         token = request.data.get('token')
         if not token:
             return Response({'message': 'No token provided'}, status=status.HTTP_400_BAD_REQUEST)
         try:
-            print(token)
 
             payload = id_token.verify_oauth2_token(token, google_requests.Request(), settings.GOOGLE_CLIENT_ID)
-            print(payload)
             if payload['iss'] not in ['accounts.google.com', 'https://accounts.google.com']:
                 raise ValueError('Wrong issuer.')
         except ValueError:
@@ -60,26 +55,17 @@ class GoogleLoginView(APIView):
 
         email = payload['email']
         name = payload.get('name', '')
-        print("email ",email)
 
         user, created = User.objects.get_or_create(email=email, defaults={
             'username': name,
             'social_provider': 'google', 
         })
-        if user.is_seller and user.is_buyer:
-            role = ['buyer','seller']
-        elif user.is_buyer:
-            role = ['buyer']
-        elif user.is_seller :
-            role = ['seller']
-        else:
-            return Response({'message': 'Invalid role'}, status=status.HTTP_401_UNAUTHORIZED)
-
+        
         refresh = RefreshToken.for_user(user)
         return Response({
             'refresh': str(refresh),
             'access': str(refresh.access_token),
-            'role': role
+            'role' : 'user'
             }, status=status.HTTP_200_OK)
     
 class AdminLoginView(APIView):
@@ -89,22 +75,17 @@ class AdminLoginView(APIView):
         email = request.data.get('email')
         password = request.data.get('password')
         
-        if email is None or password is None:
-            
-            return Response(
-                {'message': 'Please provide both email and password'},
-                  status=status.HTTP_400_BAD_REQUEST)
+        if not email or not password:
+            return Response({'message': 'Please provide both email and password'},status=status.HTTP_400_BAD_REQUEST)
 
         try:
             user = User.objects.get(email=email)
             if not user.check_password(password) or not user.is_staff:
-                return Response(
-                    {'message': 'Invalid email or password'}, 
-                    status=status.HTTP_401_UNAUTHORIZED)
+                return Response({'message': 'Invalid email or password'},status=status.HTTP_400_BAD_REQUEST)
         except User.DoesNotExist:
             return Response(
                 {'message': 'User is not exist.'}, 
-                status=status.HTTP_401_UNAUTHORIZED)
+                status=status.HTTP_400_BAD_REQUEST)
 
         refresh = RefreshToken.for_user(user)
 
@@ -127,7 +108,6 @@ class CustomLoginView(APIView):
 
     
         if not email or not password:
-            print("WWWW")
             return Response({'message': 'Please provide both email and password'}, status=status.HTTP_400_BAD_REQUEST)
 
         print(f"Attempting to authenticate with email: {email}, {password}")
@@ -147,19 +127,11 @@ class CustomLoginView(APIView):
 
         refresh = RefreshToken.for_user(user)
 
-        if user.is_seller and user.is_buyer:
-            role = ['buyer','seller']
-        elif user.is_buyer:
-            role = ['buyer']
-        elif user.is_seller :
-            role = ['seller']
-        else:
-            return Response({'message': 'User role is not assigned properly.'}, status=status.HTTP_401_UNAUTHORIZED)
-
+       
         return Response({
             'refresh': str(refresh),
             'access': str(refresh.access_token),
-            'role': role,
+            'role': 'user',
         }, status=status.HTTP_200_OK)
     
 class UserRegistrationView(generics.CreateAPIView):
@@ -176,11 +148,11 @@ class UserRegistrationView(generics.CreateAPIView):
 
         email = serializer.validated_data['email']
         password = serializer.validated_data['password']
-        is_seller = serializer.validated_data.get('is_seller')
-        is_buyer = not is_seller 
         username = serializer.validated_data['username']
         address = serializer.validated_data['address']
         contact_number = serializer.validated_data['contact_number']
+        agency_name = serializer.validated_data['agency_name']
+
 
         # Check for email existence only
         if User.objects.filter(email=email).exists():
@@ -192,18 +164,10 @@ class UserRegistrationView(generics.CreateAPIView):
                 email=email,
                 password=password,
                 address=address,
-                contact_number=contact_number,
-                is_seller=is_seller,
-                is_buyer=is_buyer
+                contact_number=contact_number,   
+                agency_name=agency_name, 
             )
-            if is_seller:
-                seller_profile = Seller.objects.create(
-                    user=user, 
-                    agency_name=serializer.validated_data['agency_name']
-                )
-                seller_profile.regions.set(serializer.validated_data['regions'])
-            else:
-                Buyer.objects.create(user=user)
+                
         except Exception as e:
             return Response({'message': 'Error creating user'}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
     
@@ -249,7 +213,6 @@ class OTPVerificationView(generics.GenericAPIView):
         try:
             user = User.objects.get(email=email)
             user.is_active = True
-        
             user.save()
         except User.DoesNotExist:
             return Response({"message": 'User not found', "success":False}, status=status.HTTP_404_NOT_FOUND)
@@ -307,10 +270,7 @@ class UserDetailView(generics.RetrieveAPIView):
     def get_object(self):
         return self.request.user
 
-class SellerDetailView(generics.RetrieveAPIView):
-    queryset = Seller.objects.all()
-    serializer_class = SellerSerializer
-    lookup_field = 'id'  
+
 
 class RegisterLandsViewSet(viewsets.ModelViewSet):
     queryset = LandProperty.objects.all()
@@ -321,20 +281,8 @@ class RegisterLandsViewSet(viewsets.ModelViewSet):
         category_name = self.request.data.get('category')
         seller = self.request.user
 
-        try:
-            seller = Seller.objects.get(user=seller)
-        except Seller.DoesNotExist:
-            raise serializers.ValidationError({'seller': 'Seller instance does not exist for the current user.'})
-        
-        # Check subscription status
-        subscription = Subscription.objects.filter(seller=seller).first()
-        if not subscription or (subscription.ended_at and timezone.now().date() > subscription.ended_at):
-            raise ValidationError({'subscription': 'Subscription has expired or does not exist.'})
-
-        if subscription.subscription_type == 'free':
-            property_count = LandProperty.objects.filter(seller=seller).count() + ResidentialProperty.objects.filter(seller=seller).count()
-            if property_count >= 5:
-                raise ValidationError({'subscription': 'You have reached the limit of 5 properties for a free subscription. Please upgrade to premium.'})
+        if not category_name:
+            raise serializers.ValidationError({'category': 'Category is required.'})
 
         try:
             category = PropertyCategory.objects.get(name=category_name)
@@ -353,22 +301,6 @@ class RegisterResidentialsViewSet(viewsets.ModelViewSet):
         category_name = self.request.data.get('category')
         seller = self.request.user
 
-        try:
-            seller = Seller.objects.get(user=seller)
-        except Seller.DoesNotExist:
-            raise serializers.ValidationError({'seller': 'Seller instance does not exist for the current user.'})
-        
-         # Check subscription status
-        subscription = Subscription.objects.filter(seller=seller).first()
-        if not subscription or (subscription.ended_at and timezone.now().date() > subscription.ended_at):
-            raise ValidationError({'subscription': 'Subscription has expired or does not exist.'})
-
-        if subscription.subscription_type == 'free':
-            property_count = LandProperty.objects.filter(seller=seller).count() + ResidentialProperty.objects.filter(seller=seller).count()
-            if property_count >= 5:
-                raise ValidationError({'subscription': 'You have reached the limit of 5 properties for a free subscription. Please upgrade to premium.'})
-
-
         if not category_name:
             raise serializers.ValidationError({'category': 'Category is required.'})
 
@@ -386,8 +318,8 @@ class SellerLandsViewSet(viewsets.ModelViewSet):
     def get_queryset(self):
         user = self.request.user
         try:
-            seller = Seller.objects.get(user=user)
-        except Seller.DoesNotExist:
+            seller = User.objects.get(id=user.id)
+        except User.DoesNotExist:
             return LandProperty.objects.none() 
         return LandProperty.objects.filter(seller=seller)
 
@@ -399,8 +331,8 @@ class SellerResidentsViewSet(viewsets.ModelViewSet):
     def get_queryset(self):
         user = self.request.user
         try:
-            seller = Seller.objects.get(user=user)
-        except Seller.DoesNotExist:
+            seller = User.objects.get(id=user.id)
+        except User.DoesNotExist:
             return ResidentialProperty.objects.none()  
         return ResidentialProperty.objects.filter(seller=seller)
     
@@ -498,22 +430,6 @@ class ChangePasswordView(generics.UpdateAPIView):
             return Response({"message": "Password updated successfully"}, status=status.HTTP_200_OK)
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
-class UpdateUserRole(generics.UpdateAPIView):
-    serializer_class = UpdateUserRoleSerializer
-    permission_classes = [IsAuthenticated]
-
-    def get_object(self):
-        return self.request.user
-    
-    def put(self, request, *args, **kwargs):
-        user = self.get_object()
-        serializer = self.get_serializer(user, data=request.data, partial=True)
-        
-        if serializer.is_valid():
-            serializer.save()
-            return Response(serializer.data, status=status.HTTP_200_OK)
-        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
-
 class ForgotPasswordView(generics.GenericAPIView):
     serializer_class = ForgotPasswordSerializer
     permission_classes = [AllowAny]
@@ -607,52 +523,6 @@ class UnblockUserAPIView(APIView):
         except User.DoesNotExist:
             return Response({"detail": "User not found."}, status=status.HTTP_404_NOT_FOUND)
      
-# List sellers
-class SellerListAPIView(generics.ListAPIView):
-    queryset = Seller.objects.all()
-    serializer_class = SellerSerializer
-
-class SellerBlockAPIView(APIView):    
-    def patch(self, request, *args, **kwargs):
-        seller = Seller.objects.get(pk=kwargs['pk'])
-        seller.user.is_active = False 
-        seller.user.save()
-        serializer = SellerSerializer(seller)
-        return Response(serializer.data, status=status.HTTP_200_OK)
-    
-class SellerUnblockAPIView(APIView):    
-    def patch(self, request, *args, **kwargs):
-        try:
-            seller = Seller.objects.get(pk=kwargs['pk'])
-            seller.user.is_active = True  # Unblock the user
-            seller.user.save()  # Save the User model, not just the Seller model
-
-            serializer = SellerSerializer(seller)
-            return Response(serializer.data, status=status.HTTP_200_OK)
-        except Seller.DoesNotExist:
-            return Response({"detail": "Seller not found."}, status=status.HTTP_404_NOT_FOUND)
-
-# List buyers
-class BuyerListAPIView(generics.ListAPIView):
-    queryset = Buyer.objects.all()
-    serializer_class = BuyerSerializer
-
-class BuyerBlockAPIView(APIView):    
-    def patch(self, request, *args, **kwargs):
-        buyer = Buyer.objects.get(pk=kwargs['pk'])
-        buyer.user.is_active = False 
-        buyer.user.save()
-        serializer = BuyerSerializer(buyer)
-        return Response(serializer.data, status=status.HTTP_200_OK)
-    
-
-class BuyerUnblockAPIView(APIView):    
-    def patch(self, request, *args, **kwargs):
-        buyer = Buyer.objects.get(pk=kwargs['pk'])
-        buyer.user.is_active = True 
-        buyer.user.save()
-        serializer = BuyerSerializer(buyer)
-        return Response(serializer.data, status=status.HTTP_200_OK)
 
 class RegionViewSet(viewsets.ReadOnlyModelViewSet):
     permission_classes = [AllowAny]
@@ -752,9 +622,7 @@ def admin_dashboard_data(request):
     total_revenue = SubscriptionPayment.objects.aggregate(total=Sum('amount'))['total']
 
     total_users = User.objects.count()
-    total_sellers  = Seller.objects.count()
-    total_buyers = Buyer.objects.count()
-   
+    
     return JsonResponse({
         'total_listings': total_listings,
         'total_land_properties': total_land_properties,
@@ -764,7 +632,52 @@ def admin_dashboard_data(request):
         'subscription_growth': subscription_growth,
         'total_revenue': total_revenue,
         'total_users' : total_users,
-        'total_sellers' : total_sellers,
-        'total_buyers' : total_buyers
 
     })
+
+
+class PropertySearchView(ListView):
+    template_name = 'property_search.html'
+    context_object_name = 'results'
+
+    def get_queryset(self):
+        query = Q()
+
+        # Get search parameters from the request
+        seller_name = self.request.GET.get('seller_name')
+        location = self.request.GET.get('location')
+        category_name = self.request.GET.get('category_name')
+        min_price = self.request.GET.get('min_price')
+        max_price = self.request.GET.get('max_price')
+
+        # Apply filters
+        if seller_name:
+            query &= Q(seller__username__icontains=seller_name)
+        if location:
+            query &= Q(location__icontains=location)
+        if category_name:
+            query &= Q(category__name__icontains=category_name)
+        if min_price:
+            query &= Q(price__gte=min_price)
+        if max_price:
+            query &= Q(price__lte=max_price)
+
+        # Filter for both LandProperty and ResidentialProperty
+        land_properties = LandProperty.objects.filter(query)
+        residential_properties = ResidentialProperty.objects.filter(query)
+
+        # Combine the results
+        return list(land_properties) + list(residential_properties)
+    
+class PremiumUserListAPIView(generics.ListAPIView):
+    serializer_class = UserWithSubscriptionSerializer
+    permission_classes = [IsAdminUser]
+
+    def get_queryset(self):
+        current_date = timezone.now().date()
+        # Filter users with at least one active premium subscription
+        queryset = User.objects.filter(
+            subscription__payment_plan='premium',
+            subscription__ended_at__gte=current_date
+        ).distinct()
+        return queryset

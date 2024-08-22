@@ -4,64 +4,36 @@ from django.contrib.auth.models import AbstractUser
 import random
 from datetime import timedelta
 
-def user_profile_image_path(instance, filename):
-    # return f'user_{instance.id}/profile/{filename}'
-    return 'images/{filename}'.format(filename=filename)
+from django.db import models
+from django.contrib.auth.models import AbstractUser
+from django.utils import timezone
+import random
+from datetime import timedelta
 
-SOCIAL_PROVIDERS={'email':'email','google':'google','facebook':'facebook'}
+def user_profile_image_path(instance, filename):
+    return f'images/{filename}'
+
+SOCIAL_PROVIDERS = {'email': 'email', 'google': 'google'}
+
 class User(AbstractUser):
     email = models.EmailField(unique=True)
     address = models.CharField(max_length=255, blank=True, null=True)
     contact_number = models.CharField(max_length=15, blank=True, null=True)
-
-    profile_image = models.ImageField(upload_to=user_profile_image_path, blank=True, null=True)
-    
+    profile_image = models.ImageField(upload_to=user_profile_image_path, blank=True, null=True)    
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
-    social_provider = models.CharField(max_length=50, default=SOCIAL_PROVIDERS.items(),blank=True, null=True)  
+    social_provider = models.CharField(max_length=50, choices=[(key, value) for key, value in SOCIAL_PROVIDERS.items()], blank=True, null=True)
     social_id = models.CharField(max_length=255, blank=True, null=True)
-    date_of_birth = models.DateField(null=True, blank=True)
-    is_seller = models.BooleanField(default=False)
-    is_buyer = models.BooleanField(default=True)
-    is_admin = models.BooleanField(default=False)
+    agency_name = models.CharField(max_length=255, blank=True, null=True)  # Optional for sellers
+    subscription_status = models.CharField(max_length=50, default='basic')
+    subscription_end_date = models.DateTimeField(default=timezone.now() + timezone.timedelta(days=30))
+    is_admin = models.BooleanField(default=False)  # For admin users
 
     def __str__(self):
         return self.username
 
-class Region(models.Model):
-    name = models.CharField(max_length=100)
-    is_active = models.BooleanField(default=True)
-
-
-    def __str__(self):
-        return self.name
-
-class Seller(models.Model):
-    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='seller_profiles')
-    agency_name = models.CharField(max_length=255, blank=True, null=True)
-    regions = models.ManyToManyField(Region)
-    created_at = models.DateTimeField(auto_now_add=True)
-    updated_at = models.DateTimeField(auto_now=True)
-    subscription_status = models.CharField(max_length=50, default='free')
-    subscription_end_date = models.DateTimeField(default=timezone.now() + timezone.timedelta(days=30))
-
-    def __str__(self):
-        return f'{self.user.username} - {self.agency_name or "No Agency"}'
-
-class Buyer(models.Model):
-    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='buyer_profiles')
-
-    def __str__(self):
-        return self.user.username
-    
-class AdminUser(models.Model):
-    user = models.OneToOneField(User, on_delete=models.CASCADE, related_name='admin_profile')
-
-    def __str__(self):
-        return self.user.username
-
 class EmailDevice(models.Model):
-    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='accounts_email_devices')
+    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='email_devices')
     email = models.EmailField()
     token = models.CharField(max_length=20)
     created_at = models.DateTimeField(auto_now_add=True)
@@ -81,9 +53,16 @@ class EmailDevice(models.Model):
         self.is_active = False
         self.save()
 
+class Region(models.Model):
+    name = models.CharField(max_length=100)
+    is_active = models.BooleanField(default=True)
+
+
+    def __str__(self):
+        return self.name
+    
 class Amenity(models.Model):
     name = models.CharField(max_length=255, unique=True)
-
     def __str__(self):
         return self.name
 
@@ -94,12 +73,11 @@ class PropertyCategory(models.Model):
         return self.name
 
 class LandProperty(models.Model):
-    seller = models.ForeignKey(Seller, on_delete=models.CASCADE, related_name='land_properties')
-    category = models.ForeignKey(PropertyCategory, on_delete=models.CASCADE, related_name='land_properties')
+    seller = models.ForeignKey(User, on_delete=models.CASCADE)
+    category = models.ForeignKey(PropertyCategory, on_delete=models.CASCADE)
     area = models.DecimalField(max_digits=10, decimal_places=2, help_text='Area in cent or acre')
     price = models.DecimalField(max_digits=10, decimal_places=2, help_text='Price in lakhs')
     location = models.CharField(max_length=255)
-    # images = models.ImageField(upload_to='property_images/', blank=True, null=True)
     video = models.FileField(upload_to='property_videos/', blank=True, null=True)
     description = models.TextField(blank=True, null=True)
     amenities = models.ManyToManyField(Amenity)
@@ -111,8 +89,8 @@ class ResidentialProperty(models.Model):
         ('Villa', 'Villa'),
         ('Apartment', 'Apartment'),
     ]
-    seller = models.ForeignKey(Seller, on_delete=models.CASCADE, related_name='residential_properties')
-    category = models.ForeignKey(PropertyCategory, on_delete=models.CASCADE, related_name='residential_properties')
+    seller = models.ForeignKey(User, on_delete=models.CASCADE)
+    category = models.ForeignKey(PropertyCategory, on_delete=models.CASCADE)
     property_type = models.CharField(max_length=50, choices=PROPERTY_TYPE_CHOICES)
     price = models.DecimalField(max_digits=10, decimal_places=2)
     location = models.CharField(max_length=255)
@@ -137,7 +115,7 @@ class PropertyImage(models.Model):
         return f"Image for {self.land_property or self.residential_property}"
     
 class Subscription(models.Model):
-    seller = models.ForeignKey(Seller, on_delete=models.CASCADE)
+    seller = models.ForeignKey(User, on_delete=models.CASCADE)
     SUBSCRIPTION_TYPES = (
         ('monthly', 'Monthly'),
         ('yearly', 'Yearly'),
@@ -148,7 +126,7 @@ class Subscription(models.Model):
         ('basic', 'Basic'),
         ('premium', 'Premium'),
     )
-    payment_plan = models.CharField(max_length=20, choices=PAYMENT_PLANS, default='free')
+    payment_plan = models.CharField(max_length=20, choices=PAYMENT_PLANS, default='basic')
     
     started_at = models.DateField(auto_now_add=True)
     ended_at = models.DateField(null=True, blank=True)
@@ -157,7 +135,7 @@ class Subscription(models.Model):
     
 class SubscriptionPayment(models.Model):
     subscription = models.ForeignKey(Subscription, on_delete=models.CASCADE)
-    user = models.ForeignKey(Seller, on_delete=models.CASCADE)
+    # user = models.ForeignKey(User, on_delete=models.CASCADE)
     amount = models.DecimalField(max_digits=10, decimal_places=2)
     payment_date = models.DateField(default=timezone.now)
     expiry_date = models.DateField()
