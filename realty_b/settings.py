@@ -75,6 +75,9 @@ INSTALLED_APPS = [
     'subscriptions',
     'django_otp',
     'django_otp.plugins.otp_email',
+
+#realtime chat
+    'channels',
 ]
 
 MIDDLEWARE = [
@@ -296,3 +299,4 @@ STRIPE_WEBHOOK_SECRET_KEY = config('STRIPE_WEBHOOK_SECRET_KEY')
 APPEND_SLASH = False
 
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
+ASGI_APPLICATION = 'realty_b.asgi.application'

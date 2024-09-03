@@ -28,12 +28,12 @@ class PropertyCategoryAdmin(admin.ModelAdmin):
 
 @admin.register(LandProperty)
 class LandPropertyAdmin(admin.ModelAdmin):
-    list_display = ['id', 'seller', 'category', 'price', 'area', 'location', 'video', 'description']
+    list_display = ['id', 'seller', 'category', 'price', 'area', 'location','longitude', 'latitude', 'video', 'description']
     search_fields = ['location']
 
 @admin.register(ResidentialProperty)
 class ResidentialPropertyAdmin(admin.ModelAdmin):
-    list_display = ['id', 'seller', 'category', 'property_type', 'price', 'location', 'num_rooms', 'num_bathrooms', 'size', 'video', 'description', 'land_area']
+    list_display = ['id', 'seller', 'category', 'property_type', 'price', 'location', 'longitude', 'latitude', 'num_rooms', 'num_bathrooms', 'size', 'video', 'description', 'land_area']
     search_fields = ['location']
 
 @admin.register(PropertyImage)

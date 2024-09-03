@@ -1,40 +1,30 @@
-from rest_framework import viewsets, status, generics, serializers
+from rest_framework import viewsets, status, generics, serializers, permissions
 from rest_framework.response import Response
-from rest_framework.decorators import action
+
 from django.contrib.auth import get_user_model, update_session_auth_hash
-from django.contrib.auth.password_validation import validate_password
 from rest_framework import viewsets
 from rest_framework.exceptions import ValidationError
 from django.utils import timezone
 from rest_framework_simplejwt.tokens import RefreshToken
 from django.core.mail import send_mail
-from .models import User, LandProperty, ResidentialProperty, EmailDevice, Region, Amenity, PropertyCategory, Subscription, SubscriptionPayment
-from .serializers import RegionSerializer, LandPropertySerializer, ResidentialPropertySerializer, RegisterSerializer, AmenitySerializer, UserWithSubscriptionSerializer
+from .models import User, LandProperty, ResidentialProperty, EmailDevice, Region, Amenity, PropertyCategory,  SubscriptionPayment
+from .serializers import MessageSerializer, RegionSerializer, LandPropertySerializer, ResidentialPropertySerializer, RegisterSerializer, AmenitySerializer, UserWithSubscriptionSerializer
 from .serializers import OTPVerificationSerializer, ResendOTPSerializer, PasswordChangeSerializer, ForgotPasswordSerializer, ResetPasswordSerializer
-from .serializers import RegisterResidentialPropertySerializer, RegisterLandPropertySerializer,PropertyImageSerializer,PropertyCategorySerializer
+from .serializers import RegisterResidentialPropertySerializer, RegisterLandPropertySerializer,PropertyCategorySerializer
 from rest_framework.views import APIView
-from django.core.exceptions import ObjectDoesNotExist
 from django.contrib.auth import authenticate
 from .serializers import UserSerializer
 from rest_framework.permissions import AllowAny,IsAuthenticated
 from django.conf import settings
-import requests
-from dj_rest_auth.registration.views import SocialLoginView
 from django.views.decorators.csrf import csrf_exempt
-from django.utils.decorators import method_decorator
 from rest_framework.parsers import MultiPartParser, FormParser
-from django.db.models import Count, Sum
+from django.db.models import Sum
 from django.views.generic import ListView
 from django.db.models import Q
 
 
 User = get_user_model()
-
-from allauth.socialaccount.providers.google.views import GoogleOAuth2Adapter
-from dj_rest_auth.registration.views import SocialLoginView
-from allauth.socialaccount.providers.oauth2.client import OAuth2Client
 from django.http import JsonResponse
-
 from google.oauth2 import id_token
 from google.auth.transport import requests as google_requests
 
@@ -269,8 +259,44 @@ class UserDetailView(generics.RetrieveAPIView):
 
     def get_object(self):
         return self.request.user
+    
+class SellerProfileView(generics.RetrieveAPIView):
+    serializer_class = UserSerializer
+    permission_classes = [permissions.AllowAny]  
+
+    def get_object(self):
+        user_id = self.kwargs.get('userId')
+        try:
+            return User.objects.get(pk=user_id)
+        except User.DoesNotExist:
+            raise serializers.ValidationError({'User': 'User does not exist.'})
+        
+
+class SellerProfileLandsViewSet(viewsets.ModelViewSet):
+    serializer_class = LandPropertySerializer
+    permission_classes = [permissions.AllowAny]  
+
+    def get_queryset(self):
+        user_id = self.kwargs.get('userId')
+        try:
+            seller = User.objects.get(pk=user_id)
+        except User.DoesNotExist:
+            return LandProperty.objects.none() 
+        return LandProperty.objects.filter(seller=seller)
 
 
+class SellerProfileResidentsViewSet(viewsets.ModelViewSet):
+    serializer_class = ResidentialPropertySerializer
+    permission_classes = [permissions.AllowAny]  
+
+    def get_queryset(self):
+        user_id = self.kwargs.get('userId')
+        try:
+            seller = User.objects.get(pk=user_id)
+        except User.DoesNotExist:
+            return ResidentialProperty.objects.none()  
+        return ResidentialProperty.objects.filter(seller=seller)
+ 
 
 class RegisterLandsViewSet(viewsets.ModelViewSet):
     queryset = LandProperty.objects.all()
@@ -352,46 +378,25 @@ class LandPropertyDetailView(generics.RetrieveUpdateDestroyAPIView):
     serializer_class = LandPropertySerializer
     permission_classes = [IsAuthenticated]
 
-    def get_object(self):
-        obj = super().get_object()
-        return obj
-
     def perform_update(self, serializer):
-        instance = self.get_object()
-
         video = self.request.FILES.get('video')
         if video:
             serializer.validated_data['video'] = video
         
         serializer.save()
 
-    def delete(self, request, *args, **kwargs):
-        property_instance = self.get_object()
-        property_instance.delete()
-        return Response(status=status.HTTP_204_NO_CONTENT)
 
 class ResidentialPropertyDetailView(generics.RetrieveUpdateDestroyAPIView):
     queryset = ResidentialProperty.objects.all()
     serializer_class = ResidentialPropertySerializer
     permission_classes = [IsAuthenticated]
 
-    def get_object(self):
-        obj = super().get_object()
-        return obj
-
     def perform_update(self, serializer):
-        instance = self.get_object()
         video = self.request.FILES.get('video')
         if video:
             serializer.validated_data['video'] = video
         
         serializer.save()
-
-    def delete(self, request, *args, **kwargs):
-        property_instance = self.get_object()
-        property_instance.delete()
-        return Response(status=status.HTTP_204_NO_CONTENT)
-
 
 class UpdateUserView(generics.UpdateAPIView):
     serializer_class = UserSerializer
@@ -643,14 +648,12 @@ class PropertySearchView(ListView):
     def get_queryset(self):
         query = Q()
 
-        # Get search parameters from the request
         seller_name = self.request.GET.get('seller_name')
         location = self.request.GET.get('location')
         category_name = self.request.GET.get('category_name')
         min_price = self.request.GET.get('min_price')
         max_price = self.request.GET.get('max_price')
 
-        # Apply filters
         if seller_name:
             query &= Q(seller__username__icontains=seller_name)
         if location:
@@ -662,11 +665,9 @@ class PropertySearchView(ListView):
         if max_price:
             query &= Q(price__lte=max_price)
 
-        # Filter for both LandProperty and ResidentialProperty
         land_properties = LandProperty.objects.filter(query)
         residential_properties = ResidentialProperty.objects.filter(query)
 
-        # Combine the results
         return list(land_properties) + list(residential_properties)
     
 class PremiumUserListAPIView(generics.ListAPIView):
@@ -675,9 +676,41 @@ class PremiumUserListAPIView(generics.ListAPIView):
 
     def get_queryset(self):
         current_date = timezone.now().date()
-        # Filter users with at least one active premium subscription
         queryset = User.objects.filter(
             subscription__payment_plan='premium',
             subscription__ended_at__gte=current_date
         ).distinct()
         return queryset
+
+
+
+class SendMessageView(generics.CreateAPIView):
+    serializer_class = MessageSerializer
+    permission_classes = [IsAuthenticated]
+
+    def perform_create(self, serializer):
+        serializer.save(sender=self.request.user)
+
+class MessageListView(generics.ListAPIView):
+    serializer_class = MessageSerializer
+    permission_classes = [IsAuthenticated]
+
+    def get_queryset(self):
+        seller_id = self.kwargs['seller_id']
+        return Message.objects.filter(receiver_id=seller_id)
+from .models import Message
+from django.contrib.contenttypes.models import ContentType
+
+
+class PropertyMessagesView(generics.ListAPIView):
+    serializer_class = MessageSerializer
+    permission_classes = [IsAuthenticated]
+
+    def get_queryset(self):
+        property_model_name = self.request.query_params.get('property_model')
+        property_object_id = self.request.query_params.get('property_object_id')
+
+        if property_model_name and property_object_id:
+            content_type = ContentType.objects.get(model=property_model_name)
+            return Message.objects.filter(property_content_type=content_type, property_object_id=property_object_id).order_by('timestamp')
+        return Message.objects.none()

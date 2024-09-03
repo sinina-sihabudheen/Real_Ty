@@ -1,8 +1,10 @@
 from rest_framework import serializers
 from django.contrib.auth import get_user_model
 from django.core.validators import RegexValidator
-from .models import LandProperty, ResidentialProperty, EmailDevice, Region, Amenity, PropertyCategory, PropertyImage, Subscription, SubscriptionPayment
+from .models import LandProperty, ResidentialProperty, EmailDevice, Region, Amenity, PropertyCategory, PropertyImage, Subscription, SubscriptionPayment, Message
 from django.contrib.auth.password_validation import validate_password
+from django.contrib.contenttypes.models import ContentType
+
 
 
 User = get_user_model()
@@ -27,7 +29,7 @@ class UserSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = User
-        fields = ['id', 'username', 'email', 'address', 'contact_number', 'profile_image','agency_name', 'social_provider','is_active']
+        fields = ['id', 'username', 'email', 'address', 'contact_number', 'profile_image','agency_name', 'social_provider','is_active', 'subscription_status']
 
     def update(self, instance, validated_data):
         profile_image = validated_data.pop('profile_image', None)
@@ -125,37 +127,29 @@ class PropertyImageSerializer(serializers.ModelSerializer):
         fields = ['image', 'land_property', 'residential_property']
 
 
-
-
 class RegisterLandPropertySerializer(serializers.ModelSerializer):
     images = PropertyImageSerializer(many=True, read_only=True)
     new_images = serializers.ListField(
         child=serializers.ImageField(), write_only=True, required=False
     )
     amenities = serializers.PrimaryKeyRelatedField(queryset=Amenity.objects.all(), many=True)
-    category = serializers.CharField()
+    category = serializers.CharField(write_only=True)  # handle in viewset
     seller = UserSerializer(read_only=True)
 
     class Meta:
         model = LandProperty
         fields = ['id', 'price', 'description', 'area', 'amenities', 'location', 'video', 'category', 'seller', 'images', 'new_images']
 
-    def validate(self, data):
-        category_name = data.get('category')
-        if category_name:
-            try:
-                category = PropertyCategory.objects.get(name=category_name)
-                data['category'] = category.id  # Use ID instead of instance
-            except PropertyCategory.DoesNotExist:
-                raise serializers.ValidationError({'category': 'Category does not exist.'})
-        return data
-    
     def create(self, validated_data):
         new_images = validated_data.pop('new_images', [])
+        amenities = validated_data.pop('amenities', [])
         land_property = super().create(validated_data)
 
         for image in new_images:
             PropertyImage.objects.create(land_property=land_property, image=image)
+
+        land_property.amenities.set(amenities)
+        land_property.save()
 
         return land_property
 
@@ -193,87 +187,66 @@ class RegisterResidentialPropertySerializer(serializers.ModelSerializer):
 
         return residential_property
 
-    
+
 class LandPropertySerializer(serializers.ModelSerializer):
     images = PropertyImageSerializer(many=True, read_only=True)
-    amenities = serializers.PrimaryKeyRelatedField(queryset=Amenity.objects.all(), many=True)
-
-    category = serializers.CharField()  
+    amenities = serializers.StringRelatedField(many=True)
+    category = serializers.CharField()
     seller = UserSerializer(read_only=True)
-
 
     class Meta:
         model = LandProperty
-        fields = ['id', 'price', 'description', 'area', 'amenities', 'location', 'video', 'category', 'seller','images']
-        
-    def validate_category(self, value):
-        if value and not PropertyCategory.objects.filter(name=value).exists():
-            raise serializers.ValidationError('Category does not exist.')
-        return value
-    
+        fields = ['id', 'price', 'description', 'area', 'amenities', 'location','latitude', 'longitude', 'video', 'category', 'seller', 'images']
+
     def update(self, instance, validated_data):
         category_name = validated_data.pop('category', None)
-        amenities_data = validated_data.pop('amenities', None)
-        
-        # Update other fields
+        new_images = self.context['request'].FILES.getlist('new_images')
+
         for attr, value in validated_data.items():
             setattr(instance, attr, value)
-        
-        # Handle many-to-many field
-        if amenities_data is not None:
-            instance.amenities.set(amenities_data)
+
         if category_name:
             category = PropertyCategory.objects.get(name=category_name)
             instance.category = category
 
-        for attr, value in validated_data.items():
-            setattr(instance, attr, value)
+        if new_images:
+            # instance.images.all().delete()  
+            for image in new_images:
+                PropertyImage.objects.create(land_property=instance, image=image) 
 
         instance.save()
-    
         return instance
+
 
 class ResidentialPropertySerializer(serializers.ModelSerializer):
     images = PropertyImageSerializer(many=True, read_only=True)
-    amenities = serializers.PrimaryKeyRelatedField(queryset=Amenity.objects.all(), many=True)
-
-    category = serializers.CharField()  
+    amenities = serializers.StringRelatedField(many=True)
+    category = serializers.CharField()
     seller = UserSerializer(read_only=True)
-
 
     class Meta:
         model = ResidentialProperty
-        fields = ['id', 'seller', 'category', 'property_type', 'price',
-                 'location', 'num_rooms', 'num_bathrooms', 'size', 'amenities',
-                 'description', 'land_area', 'video','images']
+        fields = ['id', 'seller', 'category', 'property_type', 'price', 'location','latitude', 'longitude', 'num_rooms', 'num_bathrooms', 'size', 'amenities', 'description', 'land_area', 'video', 'images']
 
-    def validate_category(self, value):
-        if not PropertyCategory.objects.filter(name=value).exists():
-            raise serializers.ValidationError('Category does not exist.')
-        return value
-    
     def update(self, instance, validated_data):
         category_name = validated_data.pop('category', None)
-        amenities_data = validated_data.pop('amenities', None)
-        
-        # Update other fields
+        new_images = self.context['request'].FILES.getlist('new_images')
+
         for attr, value in validated_data.items():
             setattr(instance, attr, value)
-        
-        # Handle many-to-many field
-        if amenities_data is not None:
-            instance.amenities.set(amenities_data)
 
         if category_name:
             category = PropertyCategory.objects.get(name=category_name)
             instance.category = category
 
-        for attr, value in validated_data.items():
-            setattr(instance, attr, value)
+        if new_images:
+            # instance.images.all().delete()  
+            for image in new_images:
+                PropertyImage.objects.create(residential_property=instance, image=image) 
 
         instance.save()
-        return instance
-    
+        return instance  
+
 
 class OTPSerializer(serializers.Serializer):
     email = serializers.EmailField()
@@ -321,7 +294,7 @@ class PasswordChangeSerializer(serializers.Serializer):
 class SubscriptionSerializer(serializers.ModelSerializer):
     class Meta:
         model = Subscription
-        fields = ['subscription_type', 'payment_plan', 'started_at', 'ended_at','seller']
+        fields = ['subscription_type', 'payment_plan', 'started_at', 'ended_at','seller','stripe_subscription_id']
 
 class UserWithSubscriptionSerializer(serializers.ModelSerializer):
     subscriptions = serializers.SerializerMethodField()
@@ -334,3 +307,19 @@ class UserWithSubscriptionSerializer(serializers.ModelSerializer):
         # Filter subscriptions where the seller is the current user
         subscriptions = Subscription.objects.filter(seller=user)
         return SubscriptionSerializer(subscriptions, many=True).data
+ 
+
+class MessageSerializer(serializers.ModelSerializer):
+    property_content_type = serializers.CharField(source='property_content_type.model', read_only=True)
+    property_object_id = serializers.IntegerField()
+
+    class Meta:
+        model = Message
+        fields = ['id', 'sender', 'receiver', 'text', 'timestamp', 'property_content_type', 'property_object_id']
+
+    def create(self, validated_data):
+        property_model = ContentType.objects.get(model=validated_data.pop('property_content_type')['model'])
+        property_instance = property_model.get_object_for_this_type(id=validated_data.pop('property_object_id'))
+        message = Message.objects.create(property_content_type=property_model,
+                                        property_object_id=property_instance.id, **validated_data)
+        return message

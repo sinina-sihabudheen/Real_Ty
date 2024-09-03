@@ -1,7 +1,7 @@
 from django.urls import path, include
 from rest_framework.routers import DefaultRouter
 from .views import (
-    GoogleLoginView, PremiumUserListAPIView, PropertySearchView, UserBlockAPIView, UnblockUserAPIView,
+    GoogleLoginView, MessageListView, PremiumUserListAPIView, PropertyMessagesView, PropertySearchView, SellerProfileLandsViewSet, SellerProfileResidentsViewSet, SellerProfileView, SendMessageView, UserBlockAPIView, UnblockUserAPIView,
     UserRegistrationView, OTPVerificationView, CustomLoginView,
     ResendOTPView, ForgotPasswordView,RegionViewSet, 
     UserDetailView, UpdateUserView, ChangePasswordView, 
@@ -41,6 +41,10 @@ urlpatterns = [
     path('resend-otp/', ResendOTPView.as_view(), name='resend-otp'),
     path('user/', UserDetailView.as_view(), name='user-detail'),
 
+    path('sellerProfile/<int:userId>/', SellerProfileView.as_view(), name='seller-profile'),
+    path('seller-profile-lands/<int:userId>/', SellerProfileLandsViewSet.as_view({'get': 'list'}), name='seller-profile-lands'),
+    path('seller-profile-residents/<int:userId>/', SellerProfileResidentsViewSet.as_view({'get': 'list'}), name='seller-profile-residents'),
+
     path('update-user/', UpdateUserView.as_view(), name='update-user'),
     path('change-password/', ChangePasswordView.as_view(), name='change-password'),
     
@@ -75,6 +79,10 @@ urlpatterns = [
     path('search/', PropertySearchView.as_view(), name='property_search'),
     path('premium-users/', PremiumUserListAPIView.as_view(), name='premium-users-list'),
 
+
+    path('send-message/', SendMessageView.as_view(), name='send-message'),
+    path('messages/<int:seller_id>/', MessageListView.as_view(), name = 'message-list'),
+    path('property-messages/<int:property_id>/', PropertyMessagesView.as_view(), name='property-messages'),
 
 ]
 
