@@ -1,7 +1,7 @@
 from django.urls import path, include
 from rest_framework.routers import DefaultRouter
 from .views import (
-    GoogleLoginView, MessageListView, PremiumUserListAPIView, PropertyMessagesView, PropertySearchView, SellerProfileLandsViewSet, SellerProfileResidentsViewSet, SellerProfileView, SendMessageView, UserBlockAPIView, UnblockUserAPIView,
+    GoogleLoginView, MarkMessagesAsRead, MessageListView, PremiumUserListAPIView, PropertySearchView, SellerProfileLandsViewSet, SellerProfileResidentsViewSet, SellerProfileView, SendMessageView, UnreadMessagesView, UserBlockAPIView, UnblockUserAPIView,
     UserRegistrationView, OTPVerificationView, CustomLoginView,
     ResendOTPView, ForgotPasswordView,RegionViewSet, 
     UserDetailView, UpdateUserView, ChangePasswordView, 
@@ -39,7 +39,7 @@ urlpatterns = [
     path('register/', UserRegistrationView.as_view(), name='register'),
     path('verify-otp/', OTPVerificationView.as_view(), name='verify-otp'),
     path('resend-otp/', ResendOTPView.as_view(), name='resend-otp'),
-    path('user/', UserDetailView.as_view(), name='user-detail'),
+    path('user/', UserDetailView.as_view(), name='user-detail'), 
 
     path('sellerProfile/<int:userId>/', SellerProfileView.as_view(), name='seller-profile'),
     path('seller-profile-lands/<int:userId>/', SellerProfileLandsViewSet.as_view({'get': 'list'}), name='seller-profile-lands'),
@@ -82,7 +82,8 @@ urlpatterns = [
 
     path('send-message/', SendMessageView.as_view(), name='send-message'),
     path('messages/<int:seller_id>/', MessageListView.as_view(), name = 'message-list'),
-    path('property-messages/<int:property_id>/', PropertyMessagesView.as_view(), name='property-messages'),
+    path('messages/unread/', UnreadMessagesView.as_view(), name = 'unread-messages'),
+    path('messages/mark-messages-as-read/<int:sender_id>', MarkMessagesAsRead.as_view(), name = 'mark-messages-as-read'),
 
 ]
 

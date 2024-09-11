@@ -177,6 +177,8 @@ class Message(models.Model):
     property_content_type = models.ForeignKey(ContentType, on_delete=models.CASCADE, null=True, blank=True)
     property_object_id = models.PositiveIntegerField(null=True, blank=True)
     property = GenericForeignKey('property_content_type', 'property_object_id')
+    is_read = models.BooleanField(default=False)
+
 
     def __str__(self):
         return f"Message from {self.sender} to {self.receiver} - {self.timestamp}"

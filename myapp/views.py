@@ -7,7 +7,7 @@ from rest_framework.exceptions import ValidationError
 from django.utils import timezone
 from rest_framework_simplejwt.tokens import RefreshToken
 from django.core.mail import send_mail
-from .models import User, LandProperty, ResidentialProperty, EmailDevice, Region, Amenity, PropertyCategory,  SubscriptionPayment
+from .models import User, LandProperty, ResidentialProperty, EmailDevice, Region, Amenity, PropertyCategory,  SubscriptionPayment, Message
 from .serializers import MessageSerializer, RegionSerializer, LandPropertySerializer, ResidentialPropertySerializer, RegisterSerializer, AmenitySerializer, UserWithSubscriptionSerializer
 from .serializers import OTPVerificationSerializer, ResendOTPSerializer, PasswordChangeSerializer, ForgotPasswordSerializer, ResetPasswordSerializer
 from .serializers import RegisterResidentialPropertySerializer, RegisterLandPropertySerializer,PropertyCategorySerializer
@@ -18,9 +18,11 @@ from rest_framework.permissions import AllowAny,IsAuthenticated
 from django.conf import settings
 from django.views.decorators.csrf import csrf_exempt
 from rest_framework.parsers import MultiPartParser, FormParser
-from django.db.models import Sum
+from django.db.models import Sum, Count
 from django.views.generic import ListView
 from django.db.models import Q
+from rest_framework.pagination import PageNumberPagination #pagination
+from rest_framework.permissions import IsAdminUser
 
 
 User = get_user_model()
@@ -337,9 +339,15 @@ class RegisterResidentialsViewSet(viewsets.ModelViewSet):
 
         serializer.save(category=category, seller=seller)
 
+class PropertySetPagination(PageNumberPagination):
+    page_size = 6
+    page_size_query_param = 'page_size'
+   
+
 class SellerLandsViewSet(viewsets.ModelViewSet):
     serializer_class = LandPropertySerializer
     permission_classes = [IsAuthenticated]
+    pagination_class = PropertySetPagination
 
     def get_queryset(self):
         user = self.request.user
@@ -353,6 +361,7 @@ class SellerLandsViewSet(viewsets.ModelViewSet):
 class SellerResidentsViewSet(viewsets.ModelViewSet):
     serializer_class = ResidentialPropertySerializer
     permission_classes = [IsAuthenticated]
+    pagination_class = PropertySetPagination
 
     def get_queryset(self):
         user = self.request.user
@@ -365,12 +374,14 @@ class SellerResidentsViewSet(viewsets.ModelViewSet):
 class LandsListViewSet(viewsets.ModelViewSet):
     serializer_class = LandPropertySerializer
     permission_classes = [IsAuthenticated]
+    pagiation_class = PropertySetPagination
     queryset = LandProperty.objects.all()
 
 
 class ResidentsListViewSet(viewsets.ModelViewSet):
     serializer_class = ResidentialPropertySerializer
     permission_classes = [IsAuthenticated]
+    pagiation_class = PropertySetPagination
     queryset = ResidentialProperty.objects.all()
 
 class LandPropertyDetailView(generics.RetrieveUpdateDestroyAPIView):
@@ -497,14 +508,23 @@ class ResetPasswordView(generics.GenericAPIView):
 
 ##Admin side lists
 
+#pagination
+class LargeResultsSetPagination(PageNumberPagination):
+    page_size = 10
+    page_size_query_param = 'page_size'
+
+   
+
 # List users
 class UserListAPIView(generics.ListAPIView):
     serializer_class = UserSerializer
+    pagination_class = LargeResultsSetPagination    #pagination
+
     def get_queryset(self):
      
         return User.objects.exclude(is_admin=True)
     
-from rest_framework.permissions import IsAdminUser
+
 
 class UserBlockAPIView(APIView):
     permission_classes = [IsAdminUser]
@@ -684,33 +704,70 @@ class PremiumUserListAPIView(generics.ListAPIView):
 
 
 
+# class SendMessageView(generics.CreateAPIView):
+#     serializer_class = MessageSerializer
+#     permission_classes = [IsAuthenticated]
+
+#     def perform_create(self, serializer):
+#         serializer.save(sender=self.request.user)
+
 class SendMessageView(generics.CreateAPIView):
     serializer_class = MessageSerializer
     permission_classes = [IsAuthenticated]
 
     def perform_create(self, serializer):
-        serializer.save(sender=self.request.user)
+
+        sender = self.request.user
+        receiver_id = self.request.data.get('receiver')
+        
+        try:
+            receiver = User.objects.get(id=receiver_id)
+        except User.DoesNotExist:
+            raise serializers.ValidationError("Receiver does not exist.")
+        
+        serializer.save(sender=sender, receiver=receiver)
 
 class MessageListView(generics.ListAPIView):
     serializer_class = MessageSerializer
     permission_classes = [IsAuthenticated]
 
     def get_queryset(self):
+        user = self.request.user
         seller_id = self.kwargs['seller_id']
-        return Message.objects.filter(receiver_id=seller_id)
-from .models import Message
-from django.contrib.contenttypes.models import ContentType
+        
+        # Retrieve messages where the user is either the sender or the receiver
+        return Message.objects.filter(
+            Q(sender=user, receiver_id=seller_id) | Q(receiver=user, sender_id=seller_id)
+        ).order_by('timestamp')
+    
 
-
-class PropertyMessagesView(generics.ListAPIView):
-    serializer_class = MessageSerializer
+class UnreadMessagesView(generics.ListAPIView):
     permission_classes = [IsAuthenticated]
 
-    def get_queryset(self):
-        property_model_name = self.request.query_params.get('property_model')
-        property_object_id = self.request.query_params.get('property_object_id')
+    def get(self, request):
+        user = request.user
+        unread_messages = Message.objects.filter(receiver=user, is_read=False) \
+                                         .values('sender', 'property_object_id') \
+                                         .annotate(unread_count=Count('id')) \
+                                         .order_by('-unread_count')
+        senders = []
+        for message in unread_messages:
+            sender = User.objects.get(id=message['sender'])
+            senders.append({
+                'sender': sender.id,
+                'sender_name': sender.username,
+                'unread_count': message['unread_count'],
+                'property_id': message['property_object_id'] 
+            })
+        return Response(senders)
+    
+class MarkMessagesAsRead(APIView):
+    permission_classes = [IsAuthenticated]
 
-        if property_model_name and property_object_id:
-            content_type = ContentType.objects.get(model=property_model_name)
-            return Message.objects.filter(property_content_type=content_type, property_object_id=property_object_id).order_by('timestamp')
-        return Message.objects.none()
+    def post(self, request, sender_id):
+        user = request.user
+        messages = Message.objects.filter(sender=sender_id, receiver=user, is_read=False)
+        messages.update(is_read=True)
+        return Response({"detail": "Messages marked as read."}, status=status.HTTP_200_OK)
+
+    
