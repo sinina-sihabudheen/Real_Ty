@@ -75,8 +75,8 @@ class LandProperty(models.Model):
     price = models.DecimalField(max_digits=10, decimal_places=2, help_text='Price in lakhs')
 
     location = models.CharField(max_length=255)
-    latitude = models.DecimalField(max_digits=9, decimal_places=6, null=True, blank=True)
-    longitude = models.DecimalField(max_digits=9, decimal_places=6, null=True, blank=True)
+    latitude = models.DecimalField(max_digits=20, decimal_places=15, null=True, blank=True)
+    longitude = models.DecimalField(max_digits=20, decimal_places=15, null=True, blank=True)
     
     video = models.FileField(upload_to='property_videos/', blank=True, null=True)
     description = models.TextField(blank=True, null=True)
@@ -95,8 +95,8 @@ class ResidentialProperty(models.Model):
     price = models.DecimalField(max_digits=10, decimal_places=2)
 
     location = models.CharField(max_length=255)
-    latitude = models.DecimalField(max_digits=9, decimal_places=6, null=True, blank=True)
-    longitude = models.DecimalField(max_digits=9, decimal_places=6, null=True, blank=True)
+    latitude = models.DecimalField(max_digits=20, decimal_places=15, null=True, blank=True)
+    longitude = models.DecimalField(max_digits=20, decimal_places=15, null=True, blank=True)
 
     num_rooms = models.IntegerField()
     num_bathrooms = models.IntegerField()
@@ -139,7 +139,6 @@ class Subscription(models.Model):
     
 class SubscriptionPayment(models.Model):
     subscription = models.ForeignKey(Subscription, on_delete=models.CASCADE)
-    # user = models.ForeignKey(User, on_delete=models.CASCADE)
     amount = models.DecimalField(max_digits=10, decimal_places=2)
     payment_date = models.DateField(default=timezone.now)
     expiry_date = models.DateField()
@@ -152,19 +151,6 @@ class SubscriptionPayment(models.Model):
     payment_status = models.CharField(max_length=10, choices=PAYMENT_STATUSES)
     
     transaction_id = models.CharField(max_length=100)
-
-
-# class Message(models.Model):
-#     sender = models.ForeignKey(User, on_delete=models.CASCADE, related_name="sent_messages")
-#     receiver = models.ForeignKey(User, on_delete=models.CASCADE, related_name="received_messages")
-#     text = models.TextField()
-#     timestamp = models.DateTimeField(auto_now_add=True)
-#     property_land = models.ForeignKey(LandProperty, on_delete=models.CASCADE, null=True, blank=True)
-#     property_resident = models.ForeignKey(ResidentialProperty, on_delete=models.CASCADE, null=True, blank=True)
-
-
-#     def __str__(self):
-#         return f"Message from {self.sender} to {self.receiver} - {self.timestamp}"
 
 
 class Message(models.Model):
@@ -184,4 +170,4 @@ class Message(models.Model):
         return f"Message from {self.sender} to {self.receiver} - {self.timestamp}"
 
     class Meta:
-        ordering = ['timestamp']
+        ordering = ['timestamp'] 

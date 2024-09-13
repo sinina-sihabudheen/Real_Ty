@@ -1,8 +1,6 @@
 from rest_framework import viewsets, status, generics, serializers, permissions
 from rest_framework.response import Response
-
 from django.contrib.auth import get_user_model, update_session_auth_hash
-from rest_framework import viewsets
 from rest_framework.exceptions import ValidationError
 from django.utils import timezone
 from rest_framework_simplejwt.tokens import RefreshToken
@@ -14,17 +12,13 @@ from .serializers import RegisterResidentialPropertySerializer, RegisterLandProp
 from rest_framework.views import APIView
 from django.contrib.auth import authenticate
 from .serializers import UserSerializer
-from rest_framework.permissions import AllowAny,IsAuthenticated
+from rest_framework.permissions import AllowAny,IsAuthenticated, IsAdminUser
 from django.conf import settings
 from django.views.decorators.csrf import csrf_exempt
 from rest_framework.parsers import MultiPartParser, FormParser
-from django.db.models import Sum, Count
+from django.db.models import Sum, Count, Q
 from django.views.generic import ListView
-from django.db.models import Q
 from rest_framework.pagination import PageNumberPagination #pagination
-from rest_framework.permissions import IsAdminUser
-
-
 User = get_user_model()
 from django.http import JsonResponse
 from google.oauth2 import id_token

@@ -138,7 +138,7 @@ class RegisterLandPropertySerializer(serializers.ModelSerializer):
 
     class Meta:
         model = LandProperty
-        fields = ['id', 'price', 'description', 'area', 'amenities', 'location', 'video', 'category', 'seller', 'images', 'new_images']
+        fields = ['id', 'price', 'description', 'area', 'amenities', 'location', 'latitude', 'longitude', 'video', 'category', 'seller', 'images', 'new_images']
 
     def create(self, validated_data):
         new_images = validated_data.pop('new_images', [])
@@ -166,7 +166,7 @@ class RegisterResidentialPropertySerializer(serializers.ModelSerializer):
 
     class Meta:
         model = ResidentialProperty
-        fields = ['seller', 'category', 'property_type', 'price', 'location', 'num_rooms', 'num_bathrooms', 'size', 'amenities', 'description', 'land_area', 'video', 'images', 'new_images']
+        fields = ['seller', 'category', 'property_type', 'price', 'location', 'latitude', 'longitude', 'num_rooms', 'num_bathrooms', 'size', 'amenities', 'description', 'land_area', 'video', 'images', 'new_images']
 
     def validate(self, data):
         category_name = data.get('category')
@@ -306,6 +306,16 @@ class UserWithSubscriptionSerializer(serializers.ModelSerializer):
     def get_subscriptions(self, user):
         subscriptions = Subscription.objects.filter(seller=user)
         return SubscriptionSerializer(subscriptions, many=True).data
+#For revenue
+class SubscriptionPaymentSerializer(serializers.ModelSerializer):
+    subscription_type = serializers.CharField(source='subscription.subscription_type')
+    payment_plan = serializers.CharField(source='subscription.payment_plan')
+    username = serializers.CharField(source='subscription.seller.username')
+
+    class Meta:
+        model = SubscriptionPayment
+        fields = ['username', 'transaction_id', 'amount','subscription', 'payment_date', 'subscription_type','payment_plan']
+
  
 
 class MessageSerializer(serializers.ModelSerializer):

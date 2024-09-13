@@ -10,7 +10,11 @@ from rest_framework.permissions import IsAuthenticated, AllowAny
 from django.views.decorators.csrf import csrf_exempt
 import json
 from django.http import JsonResponse, HttpResponse
+from myapp.serializers import SubscriptionPaymentSerializer
+from django.db.models import Sum
 
+from rest_framework import viewsets, status, generics, serializers, permissions
+from rest_framework.permissions import IsAdminUser
 
 
 import logging
@@ -279,4 +283,24 @@ def get_invoice(request, subscription_id):
             return Response({'detail': 'No invoices found for this subscription.'}, status=status.HTTP_404_NOT_FOUND)
     except stripe.error.StripeError as e:
         return Response({'error': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+class RevenueReportAPIView(generics.ListAPIView):
+    serializer_class = SubscriptionPaymentSerializer
+    permission_classes = [IsAdminUser]
+
+    def get_queryset(self):
+        # Filter payments where the status is 'paid'
+        return SubscriptionPayment.objects.filter(payment_status='paid').order_by('-payment_date')
+
+    def list(self, request, *args, **kwargs):
+        response = super().list(request, *args, **kwargs)
+        queryset = self.get_queryset()
+        
+        # Calculate the total revenue
+        total_revenue = queryset.aggregate(total=Sum('amount'))['total'] or 0
+        response.data = {
+            'total_revenue': total_revenue,
+            'payments': response.data
+        }
+        return response
 

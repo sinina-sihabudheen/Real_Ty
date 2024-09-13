@@ -1,6 +1,6 @@
 from django.urls import path
 from . import views
-from .views import get_session_details, get_invoice
+from .views import get_session_details, get_invoice, RevenueReportAPIView
 
 
 urlpatterns = [
@@ -10,5 +10,7 @@ urlpatterns = [
     path('stripe-webhook', views.stripe_webhook, name='stripe-webhook'),
     path('stripe/session/<str:session_id>/', get_session_details, name='get-session-details'),
     path('invoice/<int:subscription_id>/', get_invoice, name='get_invoice'),
+    path('revenue/',RevenueReportAPIView.as_view(),name = 'revenue_report'),
+
 
     ]
