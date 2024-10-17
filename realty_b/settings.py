@@ -16,6 +16,15 @@ from datetime import timedelta
 from decouple import config
 
 
+import mimetypes
+
+
+# A Bug is was encountering
+
+# mimetypes.add_type("text/css", ".css", True)
+
+mimetypes.init()
+mimetypes.types_map['.css']='text/css'
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
@@ -45,6 +54,8 @@ ALLOWED_HOSTS = ['localhost', '127.0.0.1']
 # Application definition
 
 INSTALLED_APPS = [
+    "daphne",
+    'channels',
     'django.contrib.admin',
     'django.contrib.auth',
     'django.contrib.contenttypes',
@@ -67,17 +78,16 @@ INSTALLED_APPS = [
     'allauth.account',
     'dj_rest_auth.registration',
     'allauth.socialaccount',
-    # 'allauth.socialaccount.providers.facebook',
     'allauth.socialaccount.providers.google',
-
-#For OTP  
+#apps
     'myapp',
     'subscriptions',
+    'notification_chat',
+#For OTP
     'django_otp',
     'django_otp.plugins.otp_email',
-
-#realtime chat
-    'channels',
+    
+    
 ]
 
 MIDDLEWARE = [
@@ -95,7 +105,6 @@ MIDDLEWARE = [
     'myapp.middleware.CustomHeaderMiddleware',  
 
 
-
 ]
 
 
@@ -108,22 +117,31 @@ AUTHENTICATION_BACKENDS = [
 
 CORS_ALLOWED_ORIGINS = [
     'http://localhost:5173',
+    'http://localhost:8000',
+
 ]
 
-CORS_ORIGIN_ALLOW_ALL = True
+# CORS_ORIGIN_ALLOW_ALL = True
+CORS_ALLOW_CREDENTIALS = True
 
 CSRF_TRUSTED_ORIGINS = [
     'http://localhost:5173',
-    # 'http://localhost:8000',
+    'http://localhost:8000',
 ]
 
 # SESSION_COOKIE_SECURE = True
 
-CSRF_COOKIE_SECURE=False
-CSRF_COOKIE_HTTPONLY=False
+# CSRF_COOKIE_SECURE=False    # for HTTP
+# CSRF_COOKIE_HTTPONLY=False
+
+# Cookie settings
+SESSION_COOKIE_SAMESITE = 'None'  # Required for cross-origin cookies
+SESSION_COOKIE_SECURE = True  # Ensure cookies are only sent over HTTPS
+CSRF_COOKIE_SAMESITE = 'None'  # Required for cross-origin requests
+CSRF_COOKIE_SECURE = True  # Ensure CSRF cookies are only sent over HTTPS
+CSRF_COOKIE_HTTPONLY = False  # Allows JavaScript to access CSRF token if needed
 
 
-CORS_ALLOW_CREDENTIALS = True
 
 SITE_ID = 1
 
@@ -143,6 +161,19 @@ REST_FRAMEWORK = {
 }
 
 REST_USE_JWT = True
+
+
+ASGI_APPLICATION = 'realty_b.asgi.application'
+
+CHANNEL_LAYERS = {
+    'default': {
+        'BACKEND': 'channels_redis.core.RedisChannelLayer',
+        
+        'CONFIG': {
+            "hosts": [('127.0.0.1', 6379)],
+        },
+    },
+}
 
 ACCOUNT_EMAIL_VERIFICATION = 'mandatory'
 ACCOUNT_EMAIL_REQUIRED = True
@@ -166,15 +197,20 @@ SOCIALACCOUNT_PROVIDERS = {
         'METHOD': 'oauth2',
         'VERIFIED_EMAIL': False,
         'VERSION': 'v2',
+        'APP': {
+            'client_id': GOOGLE_CLIENT_ID,
+            'secret': GOOGLE_CLIENT_SECRET,
+            'key': ''
+        }
     }
 }
 
-# Add your Google OAuth client ID and secret
-SOCIALACCOUNT_PROVIDERS['google']['APP'] = {
-    'client_id': GOOGLE_CLIENT_ID,
-    'secret': GOOGLE_CLIENT_SECRET,
-    'key': ''
-}
+# # Add your Google OAuth client ID and secret
+# SOCIALACCOUNT_PROVIDERS['google']['APP'] = {
+#     'client_id': GOOGLE_CLIENT_ID,
+#     'secret': GOOGLE_CLIENT_SECRET,
+#     'key': ''
+# }
 
 
 #Email configuration
@@ -241,7 +277,8 @@ TEMPLATES = [
     },
 ]
 
-WSGI_APPLICATION = 'realty_b.wsgi.application'
+# WSGI_APPLICATION = 'realty_b.wsgi.application'
+
 
 
 # Database
@@ -254,9 +291,6 @@ DATABASES = {
     }
 }
 
-
-# Password validation
-# https://docs.djangoproject.com/en/5.0/ref/settings/#auth-password-validators
 
 AUTH_PASSWORD_VALIDATORS = [
     {
@@ -301,4 +335,10 @@ STRIPE_WEBHOOK_SECRET_KEY = config('STRIPE_WEBHOOK_SECRET_KEY')
 APPEND_SLASH = False
 
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
-ASGI_APPLICATION = 'realty_b.asgi.application'
+
+# Celery configuration
+CELERY_BROKER_URL = 'redis://localhost:6379/0'  # Example using Redis as a broker
+CELERY_RESULT_BACKEND = 'redis://localhost:6379/0'
+CELERY_ACCEPT_CONTENT = ['json']
+CELERY_TASK_SERIALIZER = 'json'
+broker_connection_retry_on_startup = True

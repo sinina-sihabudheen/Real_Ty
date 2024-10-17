@@ -1,7 +1,7 @@
 from rest_framework import serializers
 from django.contrib.auth import get_user_model
 from django.core.validators import RegexValidator
-from .models import LandProperty, ResidentialProperty, EmailDevice, Region, Amenity, PropertyCategory, PropertyImage, Subscription, SubscriptionPayment, Message
+from .models import LandProperty, ResidentialProperty, EmailDevice, Region, Amenity, PropertyCategory, PropertyImage, Subscription, SubscriptionPayment
 from django.contrib.auth.password_validation import validate_password
 from django.contrib.contenttypes.models import ContentType
 
@@ -317,36 +317,3 @@ class SubscriptionPaymentSerializer(serializers.ModelSerializer):
         fields = ['username', 'transaction_id', 'amount','subscription', 'payment_date', 'subscription_type','payment_plan']
 
  
-
-class MessageSerializer(serializers.ModelSerializer):
-    property_content_type = serializers.CharField(source='property_content_type.model', read_only=True)
-    property_object_id = serializers.IntegerField(required=False, allow_null=True)
-
-
-    class Meta:
-        model = Message
-        fields = ['id', 'sender', 'receiver', 'text', 'timestamp', 'property_content_type', 'property_object_id']
-
-    def create(self, validated_data):
-        property_content_type_model = validated_data.pop('property_content_type', None)
-        property_object_id = validated_data.pop('property_object_id', None)
-
-        property_model = None
-        property_instance = None
-
-        if property_content_type_model and property_object_id:
-            try:
-                property_model = ContentType.objects.get(model=property_content_type_model)
-                property_instance = property_model.get_object_for_this_type(id=property_object_id)
-            except ContentType.DoesNotExist:
-                raise serializers.ValidationError("Invalid property content type.")
-            except property_model.model_class().DoesNotExist:
-                raise serializers.ValidationError("Invalid property object ID.")
-
-        message = Message.objects.create(
-            property_content_type=property_model if property_model else None,
-            property_object_id=property_instance.id if property_instance else None,
-            **validated_data
-        )
-
-        return message

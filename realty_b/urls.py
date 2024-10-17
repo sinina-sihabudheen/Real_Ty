@@ -11,6 +11,7 @@ urlpatterns = [
     path('admin/', admin.site.urls),
     path('api/', include('myapp.urls')),
     path('payments/', include('subscriptions.urls')),
+    path('notifications/', include('notification_chat.urls')),
 
     path('api/auth/', include('dj_rest_auth.urls')),  
     path('api/auth/registration/', include('dj_rest_auth.registration.urls')),

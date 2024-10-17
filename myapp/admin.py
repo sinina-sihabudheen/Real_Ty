@@ -1,7 +1,7 @@
 from django.contrib import admin
 from .models import (
     User, Region, EmailDevice, Amenity, PropertyCategory,
-    LandProperty, ResidentialProperty, Subscription, SubscriptionPayment, PropertyImage,Message
+    LandProperty, ResidentialProperty, Subscription, SubscriptionPayment, PropertyImage
 )
 
 @admin.register(User)
@@ -49,9 +49,6 @@ class SubscriptionAdmin(admin.ModelAdmin):
 class SubscriptionPaymentAdmin(admin.ModelAdmin):
     list_display = ['id', 'subscription', 'amount', 'payment_date', 'expiry_date', 'payment_status','transaction_id']
 
-@admin.register(Message)
-class MessageAdmin(admin.ModelAdmin):
-    list_display = ['sender', 'receiver', 'timestamp', 'property_content_type','text','property_object_id']
 
 
 

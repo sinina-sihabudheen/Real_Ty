@@ -5,8 +5,8 @@ from rest_framework.exceptions import ValidationError
 from django.utils import timezone
 from rest_framework_simplejwt.tokens import RefreshToken
 from django.core.mail import send_mail
-from .models import User, LandProperty, ResidentialProperty, EmailDevice, Region, Amenity, PropertyCategory,  SubscriptionPayment, Message
-from .serializers import MessageSerializer, RegionSerializer, LandPropertySerializer, ResidentialPropertySerializer, RegisterSerializer, AmenitySerializer, UserWithSubscriptionSerializer
+from .models import User, LandProperty, ResidentialProperty, EmailDevice, Region, Amenity, PropertyCategory,  SubscriptionPayment
+from .serializers import RegionSerializer, LandPropertySerializer, ResidentialPropertySerializer, RegisterSerializer, AmenitySerializer, UserWithSubscriptionSerializer
 from .serializers import OTPVerificationSerializer, ResendOTPSerializer, PasswordChangeSerializer, ForgotPasswordSerializer, ResetPasswordSerializer
 from .serializers import RegisterResidentialPropertySerializer, RegisterLandPropertySerializer,PropertyCategorySerializer
 from rest_framework.views import APIView
@@ -696,72 +696,3 @@ class PremiumUserListAPIView(generics.ListAPIView):
         ).distinct()
         return queryset
 
-
-
-# class SendMessageView(generics.CreateAPIView):
-#     serializer_class = MessageSerializer
-#     permission_classes = [IsAuthenticated]
-
-#     def perform_create(self, serializer):
-#         serializer.save(sender=self.request.user)
-
-class SendMessageView(generics.CreateAPIView):
-    serializer_class = MessageSerializer
-    permission_classes = [IsAuthenticated]
-
-    def perform_create(self, serializer):
-
-        sender = self.request.user
-        receiver_id = self.request.data.get('receiver')
-        
-        try:
-            receiver = User.objects.get(id=receiver_id)
-        except User.DoesNotExist:
-            raise serializers.ValidationError("Receiver does not exist.")
-        
-        serializer.save(sender=sender, receiver=receiver)
-
-class MessageListView(generics.ListAPIView):
-    serializer_class = MessageSerializer
-    permission_classes = [IsAuthenticated]
-
-    def get_queryset(self):
-        user = self.request.user
-        seller_id = self.kwargs['seller_id']
-        
-        # Retrieve messages where the user is either the sender or the receiver
-        return Message.objects.filter(
-            Q(sender=user, receiver_id=seller_id) | Q(receiver=user, sender_id=seller_id)
-        ).order_by('timestamp')
-    
-
-class UnreadMessagesView(generics.ListAPIView):
-    permission_classes = [IsAuthenticated]
-
-    def get(self, request):
-        user = request.user
-        unread_messages = Message.objects.filter(receiver=user, is_read=False) \
-                                         .values('sender', 'property_object_id') \
-                                         .annotate(unread_count=Count('id')) \
-                                         .order_by('-unread_count')
-        senders = []
-        for message in unread_messages:
-            sender = User.objects.get(id=message['sender'])
-            senders.append({
-                'sender': sender.id,
-                'sender_name': sender.username,
-                'unread_count': message['unread_count'],
-                'property_id': message['property_object_id'] 
-            })
-        return Response(senders)
-    
-class MarkMessagesAsRead(APIView):
-    permission_classes = [IsAuthenticated]
-
-    def post(self, request, sender_id):
-        user = request.user
-        messages = Message.objects.filter(sender=sender_id, receiver=user, is_read=False)
-        messages.update(is_read=True)
-        return Response({"detail": "Messages marked as read."}, status=status.HTTP_200_OK)
-
-    

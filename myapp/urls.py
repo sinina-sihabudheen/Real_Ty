@@ -1,7 +1,9 @@
 from django.urls import path, include
 from rest_framework.routers import DefaultRouter
 from .views import (
-    GoogleLoginView, MarkMessagesAsRead, MessageListView, PremiumUserListAPIView, PropertySearchView, SellerProfileLandsViewSet, SellerProfileResidentsViewSet, SellerProfileView, SendMessageView, UnreadMessagesView, UserBlockAPIView, UnblockUserAPIView,
+    GoogleLoginView, PremiumUserListAPIView, 
+    PropertySearchView, SellerProfileLandsViewSet, SellerProfileResidentsViewSet, 
+    SellerProfileView, UserBlockAPIView, UnblockUserAPIView,
     UserRegistrationView, OTPVerificationView, CustomLoginView,
     ResendOTPView, ForgotPasswordView,RegionViewSet, 
     UserDetailView, UpdateUserView, ChangePasswordView, 
@@ -79,11 +81,6 @@ urlpatterns = [
     path('search/', PropertySearchView.as_view(), name='property_search'),
     path('premium-users/', PremiumUserListAPIView.as_view(), name='premium-users-list'),
 
-
-    path('send-message/', SendMessageView.as_view(), name='send-message'),
-    path('messages/<int:seller_id>/', MessageListView.as_view(), name = 'message-list'),
-    path('messages/unread/', UnreadMessagesView.as_view(), name = 'unread-messages'),
-    path('messages/mark-messages-as-read/<int:sender_id>', MarkMessagesAsRead.as_view(), name = 'mark-messages-as-read'),
 
 ]
 

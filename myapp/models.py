@@ -3,8 +3,6 @@ from django.contrib.auth.models import AbstractUser
 import random
 from django.utils import timezone
 from datetime import timedelta
-from django.contrib.contenttypes.models import ContentType
-from django.contrib.contenttypes.fields import GenericForeignKey
 
 def user_profile_image_path(instance, filename):
     return f'images/{filename}'
@@ -19,7 +17,6 @@ class User(AbstractUser):
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
     social_provider = models.CharField(max_length=50, choices=[(key, value) for key, value in SOCIAL_PROVIDERS.items()], blank=True, null=True)
-    social_id = models.CharField(max_length=255, blank=True, null=True)
     agency_name = models.CharField(max_length=255, blank=True, null=True)  # Optional for sellers
     subscription_status = models.CharField(max_length=50, default='basic')
     subscription_end_date = models.DateTimeField(default=timezone.now() + timezone.timedelta(days=30))
@@ -152,22 +149,3 @@ class SubscriptionPayment(models.Model):
     
     transaction_id = models.CharField(max_length=100)
 
-
-class Message(models.Model):
-    sender = models.ForeignKey(User, on_delete=models.CASCADE, related_name="sent_messages")
-    receiver = models.ForeignKey(User, on_delete=models.CASCADE, related_name="received_messages")
-    text = models.TextField()
-    timestamp = models.DateTimeField(auto_now_add=True)
-
-    # Generic Foreign Key for the property
-    property_content_type = models.ForeignKey(ContentType, on_delete=models.CASCADE, null=True, blank=True)
-    property_object_id = models.PositiveIntegerField(null=True, blank=True)
-    property = GenericForeignKey('property_content_type', 'property_object_id')
-    is_read = models.BooleanField(default=False)
-
-
-    def __str__(self):
-        return f"Message from {self.sender} to {self.receiver} - {self.timestamp}"
-
-    class Meta:
-        ordering = ['timestamp'] 
