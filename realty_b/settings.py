@@ -342,3 +342,10 @@ CELERY_RESULT_BACKEND = 'redis://localhost:6379/0'
 CELERY_ACCEPT_CONTENT = ['json']
 CELERY_TASK_SERIALIZER = 'json'
 broker_connection_retry_on_startup = True
+
+CELERY_BEAT_SCHEDULE = {
+    'check-expiring-subscriptions': {
+        'task': 'notification_chat.tasks.send_subscription_end_notification',
+        'schedule': 86400.0,  # Run every day
+    },
+}

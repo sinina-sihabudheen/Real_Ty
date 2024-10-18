@@ -28,5 +28,15 @@ def send_notification(user):
     recipient_list = [user.email]
     send_mail(subject, message, email_from, recipient_list)
 
+    # Send WebSocket notification
+    channel_layer = get_channel_layer()
+    async_to_sync(channel_layer.group_send)(
+        f"user_{user.id}",  # User-specific group
+        {
+            'type': 'send_subscription_expiration_notification',
+            'message': message,
+        }
+    )
+
 
     

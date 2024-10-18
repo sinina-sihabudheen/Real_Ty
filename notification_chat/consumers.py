@@ -131,3 +131,28 @@ class ChatConsumer(AsyncWebsocketConsumer):
     def mark_as_read_in_db(self):
         # Mark all unread messages as read for the current chat session
         Message.objects.filter(sender=self.receiver_id, receiver=self.scope['user'], is_read=False).update(is_read=True)
+
+class NotificationConsumer(AsyncWebsocketConsumer):
+    async def connect(self):
+        self.group_name = f"user_{self.scope['user'].id}"
+
+        # Join user group
+        await self.channel_layer.group_add(
+            self.group_name,
+            self.channel_name
+        )
+
+        await self.accept()
+
+    async def disconnect(self, close_code):
+        # Leave user group
+        await self.channel_layer.group_discard(
+            self.group_name,
+            self.channel_name
+        )
+
+    # Method to handle incoming notifications
+    async def send_subscription_expiration_notification(self, event):
+        await self.send(text_data=json.dumps({
+            "message": event["message"]
+        }))
