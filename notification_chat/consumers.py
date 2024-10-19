@@ -133,7 +133,44 @@ class ChatConsumer(AsyncWebsocketConsumer):
         Message.objects.filter(sender=self.receiver_id, receiver=self.scope['user'], is_read=False).update(is_read=True)
 
 class NotificationConsumer(AsyncWebsocketConsumer):
+    # async def connect(self):
+    #     self.group_name = f"user_{self.scope['user'].id}"
+
+    #     # Join user group
+    #     await self.channel_layer.group_add(
+    #         self.group_name,
+    #         self.channel_name
+    #     )
+
+    #     await self.accept()
     async def connect(self):
+        query_string = self.scope['query_string'].decode()  # Decode query string
+        params = {}
+
+        if query_string:
+            for param in query_string.split('&'):
+                key_value = param.split('=')
+                if len(key_value) == 2:  # Ensure both key and value exist
+                    key, value = key_value
+                    params[key] = value
+
+        token = params.get('token')
+
+        # Initialize JWTAuthentication
+        jwt_auth = JWTAuthentication()
+        self.user = None
+
+        # Validate token and get user
+        try:
+            validated_token = jwt_auth.get_validated_token(token)
+            self.user = await database_sync_to_async(jwt_auth.get_user)(validated_token)
+            self.scope['user'] = self.user
+        except InvalidToken:
+            print("Invalid token. Closing connection.")
+            await self.close()
+            return
+
+        # Proceed with group setup
         self.group_name = f"user_{self.scope['user'].id}"
 
         # Join user group
