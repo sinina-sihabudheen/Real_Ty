@@ -29,7 +29,7 @@ if not GOOGLE_CLIENT_ID or not GOOGLE_CLIENT_SECRET:
     raise ValueError("Google OAuth client credentials are not set in .env file!")
 
 
-ALLOWED_HOSTS = ['localhost', '127.0.0.1', '43.204.108.44']
+ALLOWED_HOSTS = ['localhost', '127.0.0.1', '43.204.108.44', 'https://realty-backend.soloshoes.online', 'https://real-ty-frontend.vercel.app']
 
 # Application definition
 
@@ -99,7 +99,7 @@ CORS_ALLOWED_ORIGINS = [
     'http://localhost:5173',
     'http://localhost:8000',
     'https://real-ty-frontend.vercel.app',
-    'https://realty-properties.duckdns.org',  
+    'https://realty-backend.soloshoes.online',  
 ]
 
 # CORS_ORIGIN_ALLOW_ALL = True
@@ -108,6 +108,8 @@ CORS_ALLOW_CREDENTIALS = True
 CSRF_TRUSTED_ORIGINS = [
     'http://localhost:5173',
     'http://localhost:8000',
+    'https://real-ty-frontend.vercel.app',
+    'https://realty-backend.soloshoes.online',  
 ]
 
 # SESSION_COOKIE_SECURE = True
@@ -265,22 +267,29 @@ TEMPLATES = [
 # Database
 # https://docs.djangoproject.com/en/5.0/ref/settings/#databases
 
-
 DATABASES = {
+   'default': {
+       'ENGINE': 'django.db.backends.sqlite3',
+       'NAME': BASE_DIR / 'db.sqlite3',
+   }
+}
 
-            'default': {
-                'ENGINE': 'django.db.backends.postgresql_psycopg2',
-                'NAME': 'myproject',
-                'USER': 'myprojectuser',
 
-                'PASSWORD': 'password',
+# DATABASES = {
 
-                'HOST': 'localhost',
+#             'default': {
+#                 'ENGINE': 'django.db.backends.postgresql_psycopg2',
+#                 'NAME': 'myproject',
+#                 'USER': 'myprojectuser',
 
-                'PORT': '',
+#                 'PASSWORD': 'password',
 
-                }
-            }
+#                 'HOST': 'localhost',
+
+#                 'PORT': '5432',
+
+#                 }
+#             }
 
 AUTH_PASSWORD_VALIDATORS = [
     {

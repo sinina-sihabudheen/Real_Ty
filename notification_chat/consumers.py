@@ -144,6 +144,8 @@ class NotificationConsumer(AsyncWebsocketConsumer):
 
     #     await self.accept()
     async def connect(self):
+        from rest_framework_simplejwt.authentication import JWTAuthentication
+
         query_string = self.scope['query_string'].decode()  # Decode query string
         params = {}
 
