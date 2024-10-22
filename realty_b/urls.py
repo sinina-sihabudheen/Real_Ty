@@ -4,7 +4,7 @@ from django.urls import path, include
 from django.conf import settings
 from django.conf.urls.static import static
 from django.views.generic import TemplateView
-
+from django.http import JsonResponse
 
 
 urlpatterns = [
@@ -12,8 +12,8 @@ urlpatterns = [
     path('api/', include('myapp.urls')),
     path('payments/', include('subscriptions.urls')),
     path('notifications/', include('notification_chat.urls')),
-    path('', TemplateView.as_view(template_name='index.html'), name='home'),  # Serve your frontend app here
 
+    path('', lambda request: JsonResponse({'message': 'Welcome to the API!'})),
 
     # path('api/auth/', include('dj_rest_auth.urls')),  
     # path('api/auth/registration/', include('dj_rest_auth.registration.urls')),
