@@ -1,4 +1,3 @@
-
 from celery import shared_task
 from django.utils import timezone
 from datetime import timedelta
@@ -6,13 +5,6 @@ from myapp.models import Subscription
 
 @shared_task
 def send_subscription_end_notification():
-    # target_date = timezone.now().date() + timedelta(days=5)
-
-    # subscriptions = Subscription.objects.filter(ended_at=target_date)
-
-    # for subscription in subscriptions:
-    #     user = subscription.seller
-    #     send_notification(user)
 
     today = timezone.now().date()
     five_days_from_now = today + timedelta(days=5)
@@ -35,21 +27,6 @@ def send_subscription_end_notification():
 
 def send_notification(user, days_left):
     print(f"Sending notification to {user.username}, email: {user.email}")
-    # from django.core.mail import send_mail
-    # subject = "Your Subscription is Ending Soon"
-    # message = f"Dear {user.username}, your subscription will expire in 5 days."
-    # email_from = 'noreply@realty.com'
-    # recipient_list = [user.email]
-    # send_mail(subject, message, email_from, recipient_list)
-
-    # channel_layer = get_channel_layer()
-    # async_to_sync(channel_layer.group_send)(
-    #     f"user_{user.id}",  
-    #     {
-    #         'type': 'send_subscription_expiration_notification',
-    #         'message': message,
-    #     }
-    # )
     
     # Define the email subject and message based on the time left
     if days_left == 5:

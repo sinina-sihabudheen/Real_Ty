@@ -188,17 +188,6 @@ SOCIALACCOUNT_PROVIDERS = {
     }
 }
 
-# # Add your Google OAuth client ID and secret
-# SOCIALACCOUNT_PROVIDERS['google']['APP'] = {
-#     'client_id': GOOGLE_CLIENT_ID,
-#     'secret': GOOGLE_CLIENT_SECRET,
-#     'key': ''
-# }
-
-
-#Email configuration
-
-# EMAIL_BACKEND = 'django.core.mail.backends.smtp.EmailBackend'
 EMAIL_HOST = 'smtp.gmail.com'
 EMAIL_PORT = 587  
 EMAIL_USE_TLS = True  
@@ -261,35 +250,32 @@ TEMPLATES = [
 ]
 
 # WSGI_APPLICATION = 'realty_b.wsgi.application'
-
-
-
 # Database
 # https://docs.djangoproject.com/en/5.0/ref/settings/#databases
 
-DATABASES = {
-   'default': {
-       'ENGINE': 'django.db.backends.sqlite3',
-       'NAME': BASE_DIR / 'db.sqlite3',
-   }
-}
-
-
 # DATABASES = {
+#    'default': {
+#        'ENGINE': 'django.db.backends.sqlite3',
+#        'NAME': BASE_DIR / 'db.sqlite3',
+#    }
+# }
 
-#             'default': {
-#                 'ENGINE': 'django.db.backends.postgresql_psycopg2',
-#                 'NAME': 'myproject',
-#                 'USER': 'myprojectuser',
 
-#                 'PASSWORD': 'password',
+DATABASES = {
 
-#                 'HOST': 'localhost',
+            'default': {
+                'ENGINE': 'django.db.backends.postgresql_psycopg2',
+                'NAME': 'myproject',
+                'USER': 'myprojectuser',
 
-#                 'PORT': '5432',
+                'PASSWORD': 'password',
 
-#                 }
-#             }
+                'HOST': 'localhost',
+
+                'PORT': '5432',
+
+                }
+            }
 
 AUTH_PASSWORD_VALIDATORS = [
     {
@@ -340,6 +326,6 @@ broker_connection_retry_on_startup = True
 CELERY_BEAT_SCHEDULE = {
     'check-expiring-subscriptions': {
         'task': 'notification_chat.tasks.send_subscription_end_notification',
-        'schedule': 86400.0,  # Run every day
+        'schedule': 86400.0,  
     },
 }
